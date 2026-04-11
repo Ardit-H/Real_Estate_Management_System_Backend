@@ -15,6 +15,7 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
@@ -35,7 +36,6 @@ spring:
   cache:
     type: redis
 
-
   # ==================== MAIL ====================
   mail:
     host: smtp.gmail.com
@@ -51,6 +51,7 @@ spring:
 
 # ==================== JWT ====================
 jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
   expiration: 86400000
 
 # ==================== ACTUATOR ====================
@@ -66,3 +67,10 @@ management:
 # ==================== SERVER ====================
 server:
   port: 8080
+
+# ==================== SWAGGER ====================
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
