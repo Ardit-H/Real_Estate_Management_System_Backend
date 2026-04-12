@@ -10,21 +10,37 @@ spring:
     password: realestate_pass
     driver-class-name: org.postgresql.Driver
 
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+
+      # KRITIKE për multitenancy:
+      # siguron default schema për çdo connection
+      connection-init-sql: "SET search_path = public"
+
   # ==================== JPA ====================
   jpa:
     hibernate:
       ddl-auto: validate
+
     show-sql: true
-    open-in-view: false
+
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+        # ❌ MOS SHTO multiTenancy këtu
+        # Hibernate MultiTenancy konfigurohet vetëm në Java config
 
   # ==================== FLYWAY ====================
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    schemas: public
 
   # ==================== REDIS ====================
   data:
@@ -52,7 +68,8 @@ spring:
 # ==================== JWT ====================
 jwt:
   secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-  expiration: 86400000
+  expiration-ms: 3600000          # 1 orë (access token)
+  refresh-expiration-ms: 604800000 # 7 ditë (refresh token)
 
 # ==================== ACTUATOR ====================
 management:
@@ -60,6 +77,7 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
   endpoint:
     health:
       show-details: always
@@ -67,10 +85,31 @@ management:
 # ==================== SERVER ====================
 server:
   port: 8080
+  servlet:
+    context-path: /
+
+    error:
+      include-message: always
+      include-binding-errors: always
 
 # ==================== SWAGGER ====================
 springdoc:
   api-docs:
-    path: /api-docs
+    path: /v3/api-docs
+
   swagger-ui:
     path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true
+    filter: true
+    display-request-duration: true
+
+  show-actuator: false
+
+# ==================== LOGGING ====================
+logging:
+  level:
+    com.realestate: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO

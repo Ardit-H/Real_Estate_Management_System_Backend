@@ -1,13 +1,27 @@
 package com.realestate.backend.entity.tenant;
 
+import com.realestate.backend.entity.User;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-@Data
 @Entity
-@Table(name = "tenants_company", schema = "public")
+@Table(
+        name = "tenants_company",
+        indexes = {
+                @Index(name = "idx_tenant_slug", columnList = "slug")
+        }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class TenantCompany {
 
     @Id
@@ -17,38 +31,27 @@ public class TenantCompany {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 80)
     private String slug;
 
+    @Builder.Default
     @Column(nullable = false)
     private String plan = "FREE";
 
-    @Column(name = "is_active")
+    @Builder.Default
+    @Column(nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "created_at", updatable = false)
+    @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    // auto set values para insert
-    @PrePersist
-    public void prePersist() {
-        this.createdAt = LocalDateTime.now();
+    @OneToMany(mappedBy = "tenant")
+    @Builder.Default
+    private List<User> users = new ArrayList<>();
 
-        if (this.isActive == null) {
-            this.isActive = true;
-        }
-
-        if (this.plan == null) {
-            this.plan = "FREE";
-        }
-    }
-
-    // auto update timestamp
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
+    @OneToOne(mappedBy = "tenant", cascade = CascadeType.ALL)
+    private TenantSchemaRegistry schemaRegistry;
 }
