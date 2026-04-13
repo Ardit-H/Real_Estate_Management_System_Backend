@@ -14,6 +14,7 @@ import java.util.List;
 @Entity
 @Table(
         name = "users",
+        schema = "public",
         indexes = {
                 @Index(name = "idx_user_email", columnList = "email"),
                 @Index(name = "idx_user_tenant", columnList = "tenant_id")
@@ -36,10 +37,10 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-    @Column(length = 50)
+    @Column(name = "first_name", length = 50)
     private String firstName;
 
-    @Column(length = 50)
+    @Column(name = "last_name", length = 50)
     private String lastName;
 
     @Enumerated(EnumType.STRING)
@@ -51,22 +52,21 @@ public class User {
     private TenantCompany tenant;
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
     @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @OneToMany(
-            mappedBy = "user",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<RefreshToken> refreshTokens = new ArrayList<>();
 

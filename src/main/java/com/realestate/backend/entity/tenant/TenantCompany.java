@@ -13,6 +13,7 @@ import java.util.List;
 @Entity
 @Table(
         name = "tenants_company",
+        schema = "public",
         indexes = {
                 @Index(name = "idx_tenant_slug", columnList = "slug")
         }
@@ -28,24 +29,26 @@ public class TenantCompany {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 80)
+    @Column(nullable = false, unique = true, length = 63)
     private String slug;
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private String plan = "FREE";
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
     @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "tenant")
