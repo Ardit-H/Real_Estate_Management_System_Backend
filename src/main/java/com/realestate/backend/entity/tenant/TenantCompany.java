@@ -1,54 +1,60 @@
 package com.realestate.backend.entity.tenant;
 
+import com.realestate.backend.entity.User;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-@Data
 @Entity
-@Table(name = "tenants_company", schema = "public")
+@Table(
+        name = "tenants_company",
+        schema = "public",
+        indexes = {
+                @Index(name = "idx_tenant_slug", columnList = "slug")
+        }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class TenantCompany {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 63)
     private String slug;
 
-    @Column(nullable = false)
+    @Builder.Default
+    @Column(nullable = false, length = 20)
     private String plan = "FREE";
 
-    @Column(name = "is_active")
+    @Builder.Default
+    @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // auto set values para insert
-    @PrePersist
-    public void prePersist() {
-        this.createdAt = LocalDateTime.now();
+    @OneToMany(mappedBy = "tenant")
+    @Builder.Default
+    private List<User> users = new ArrayList<>();
 
-        if (this.isActive == null) {
-            this.isActive = true;
-        }
-
-        if (this.plan == null) {
-            this.plan = "FREE";
-        }
-    }
-
-    // auto update timestamp
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
+    @OneToOne(mappedBy = "tenant", cascade = CascadeType.ALL)
+    private TenantSchemaRegistry schemaRegistry;
 }
