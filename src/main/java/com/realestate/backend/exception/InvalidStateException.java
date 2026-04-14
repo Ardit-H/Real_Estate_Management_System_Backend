@@ -3,7 +3,7 @@ package com.realestate.backend.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
-class InvalidStateException extends RuntimeException {
+public class InvalidStateException extends RuntimeException {
 
     public InvalidStateException(String message) {
         super(message);

@@ -2,6 +2,8 @@ package com.realestate.backend.security.jwt;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -11,31 +13,33 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * JwtUtil — gjeneron dhe verifikon JWT tokens.
- *
- * Token payload përmban:
- *   sub         → email
- *   userId      → Long
- *   tenantId    → Long
- *   schemaName  → "tenant_acme_inc"
- *   role        → "ADMIN" | "AGENT" | "CLIENT"
- */
+@Slf4j
 @Component
 public class JwtUtil {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration-ms:3600000}")   // 1 orë default
+    @Value("${jwt.expiration-ms:3600000}")
     private long jwtExpirationMs;
 
-    @Value("${jwt.refresh-expiration-ms:604800000}") // 7 ditë default
+    @Value("${jwt.refresh-expiration-ms:604800000}")
     private long refreshExpirationMs;
 
-    // --------------------------------------------------------
-    // Gjenero Access Token
-    // --------------------------------------------------------
+    // ✅ FIX: Validim në startup — fail-fast nëse key është shumë e shkurtër
+    @PostConstruct
+    public void validateSecret() {
+        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "jwt.secret duhet të jetë minimum 32 karaktere (256 bit). " +
+                            "Gjatësia aktuale: " + keyBytes.length + " bytes."
+            );
+        }
+        log.info("JWT secret u validua me sukses ({} bytes)", keyBytes.length);
+    }
+
+    // ── Gjenero Access Token ─────────────────────────────────────
     public String generateAccessToken(Long userId, String email,
                                       Long tenantId, String schemaName,
                                       String role) {
@@ -54,9 +58,7 @@ public class JwtUtil {
                 .compact();
     }
 
-    // --------------------------------------------------------
-    // Gjenero Refresh Token (payload minimal)
-    // --------------------------------------------------------
+    // ── Gjenero Refresh Token ────────────────────────────────────
     public String generateRefreshToken(Long userId, Long tenantId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId",   userId);
@@ -71,9 +73,7 @@ public class JwtUtil {
                 .compact();
     }
 
-    // --------------------------------------------------------
-    // Parsim dhe ekstraktim
-    // --------------------------------------------------------
+    // ── Parsim ───────────────────────────────────────────────────
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -82,29 +82,13 @@ public class JwtUtil {
                 .getPayload();
     }
 
-    public String extractEmail(String token) {
-        return extractAllClaims(token).getSubject();
-    }
+    public String extractEmail(String token)      { return extractAllClaims(token).getSubject(); }
+    public Long   extractUserId(String token)     { return extractAllClaims(token).get("userId",     Long.class); }
+    public Long   extractTenantId(String token)   { return extractAllClaims(token).get("tenantId",   Long.class); }
+    public String extractSchemaName(String token) { return extractAllClaims(token).get("schemaName", String.class); }
+    public String extractRole(String token)       { return extractAllClaims(token).get("role",       String.class); }
 
-    public Long extractUserId(String token) {
-        return extractAllClaims(token).get("userId", Long.class);
-    }
-
-    public Long extractTenantId(String token) {
-        return extractAllClaims(token).get("tenantId", Long.class);
-    }
-
-    public String extractSchemaName(String token) {
-        return extractAllClaims(token).get("schemaName", String.class);
-    }
-
-    public String extractRole(String token) {
-        return extractAllClaims(token).get("role", String.class);
-    }
-
-    // --------------------------------------------------------
-    // Validim
-    // --------------------------------------------------------
+    // ── Validim ───────────────────────────────────────────────────
     public boolean isTokenValid(String token) {
         try {
             extractAllClaims(token);
