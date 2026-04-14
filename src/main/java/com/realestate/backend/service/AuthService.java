@@ -35,13 +35,13 @@ public class AuthService {
 
     // ================= REGISTER =================
     @Transactional
-    public AuthResponse register(RegisterRequest req) {
+    public AuthResponse register(RegisterRequest req,
+                                 String ipAddress, String userAgent) {
 
         if (userRepository.existsByEmail(req.email())) {
             throw new ConflictException("Email ekziston");
         }
 
-        // krijo ose gjej tenant
         TenantCompany tenant = tenantRepository.findBySlug(req.tenantSlug())
                 .orElseGet(() -> {
                     TenantCompany t = new TenantCompany();
@@ -56,56 +56,44 @@ public class AuthService {
             throw new UnauthorizedException("Tenant i çaktivizuar");
         }
 
-        // krijo user
         User user = new User();
         user.setEmail(req.email());
         user.setPassword(passwordEncoder.encode(req.password()));
         user.setFirstName(req.firstName());
         user.setLastName(req.lastName());
-
-        // ✅ ENUM ROLE
-        user.setRole(
-                req.role() != null
-                        ? Role.valueOf(req.role().toUpperCase())
-                        : Role.CLIENT
-        );
-
+        user.setRole(req.role() != null
+                ? Role.valueOf(req.role().toUpperCase())
+                : Role.CLIENT);
         user.setTenant(tenant);
         user.setIsActive(true);
 
         user = userRepository.save(user);
 
-        // krijo schema nëse nuk ekziston
         String schemaName = provisioningService.provisionIfNeeded(tenant);
 
-        return buildAuthResponse(user, tenant, schemaName);
+        return buildAuthResponse(user, tenant, schemaName, ipAddress, userAgent);
     }
 
     // ================= LOGIN =================
     @Transactional
-    public AuthResponse login(LoginRequest req) {
+    public AuthResponse login(LoginRequest req,
+                              String ipAddress, String userAgent) {
 
-        User user = userRepository.findByEmail(req.email())
+        User user = userRepository.findActiveByEmail(req.email())
                 .orElseThrow(() -> new UnauthorizedException("Kredenciale të gabuara"));
 
         if (!passwordEncoder.matches(req.password(), user.getPassword())) {
             throw new UnauthorizedException("Kredenciale të gabuara");
         }
 
-        if (!user.getIsActive()) {
-            throw new UnauthorizedException("User i çaktivizuar");
-        }
-
         if (!user.getTenant().getIsActive()) {
             throw new UnauthorizedException("Tenant i çaktivizuar");
         }
 
-        String schemaName = schemaRegistryRepository
-                .findByTenant_Id(user.getTenant().getId())
-                .map(TenantSchemaRegistry::getSchemaName)
-                .orElseGet(() -> "public");
+        // ✅ FIX: proviziono nëse schema mungon — mos lejo fallback të heshtur
+        String schemaName = provisioningService.provisionIfNeeded(user.getTenant());
 
-        return buildAuthResponse(user, user.getTenant(), schemaName);
+        return buildAuthResponse(user, user.getTenant(), schemaName, ipAddress, userAgent);
     }
 
     // ================= REFRESH =================
@@ -120,7 +108,7 @@ public class AuthService {
         RefreshToken stored = refreshTokenRepository.findByToken(req.refreshToken())
                 .orElseThrow(() -> new UnauthorizedException("Token nuk ekziston"));
 
-        if (stored.getRevoked() || stored.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (!stored.isValid()) {
             throw new UnauthorizedException("Token i pavlefshëm ose i skaduar");
         }
 
@@ -131,7 +119,6 @@ public class AuthService {
                 .map(TenantSchemaRegistry::getSchemaName)
                 .orElseThrow(() -> new UnauthorizedException("Schema nuk gjendet"));
 
-        // ✅ ENUM → STRING për JWT
         String newAccessToken = jwtUtil.generateAccessToken(
                 user.getId(),
                 user.getEmail(),
@@ -153,45 +140,38 @@ public class AuthService {
                 });
     }
 
-    // ================= HELPER =================
-    private AuthResponse buildAuthResponse(User user,
-                                           TenantCompany tenant,
-                                           String schemaName) {
-
+    // ================= HELPERS =================
+    private AuthResponse buildAuthResponse(User user, TenantCompany tenant,
+                                           String schemaName,
+                                           String ipAddress, String userAgent) {
         String accessToken = jwtUtil.generateAccessToken(
-                user.getId(),
-                user.getEmail(),
-                tenant.getId(),
-                schemaName,
-                user.getRole().name() // ✅ ENUM → STRING
+                user.getId(), user.getEmail(),
+                tenant.getId(), schemaName,
+                user.getRole().name()
         );
 
-        String refreshToken = jwtUtil.generateRefreshToken(
-                user.getId(),
-                tenant.getId()
-        );
-
-        saveRefreshToken(user, refreshToken);
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), tenant.getId());
+        saveRefreshToken(user, refreshToken, ipAddress, userAgent);
 
         return new AuthResponse(
-                accessToken,
-                refreshToken,
-                user.getId(),
-                user.getEmail(),
-                user.getFullName(), // ✅ përdor metodën nga User entity
-                user.getRole().name(),
-                tenant.getId(),
-                tenant.getName(),
-                schemaName
+                accessToken, refreshToken,
+                user.getId(), user.getEmail(),
+                user.getFullName(), user.getRole().name(),
+                tenant.getId(), tenant.getName(), schemaName
         );
     }
 
-    private void saveRefreshToken(User user, String token) {
-        RefreshToken rt = new RefreshToken();
-        rt.setUser(user);
-        rt.setToken(token);
-        rt.setRevoked(false);
-        rt.setExpiresAt(LocalDateTime.now().plusDays(7));
+    // ✅ FIX: tani ruan IP dhe User-Agent
+    private void saveRefreshToken(User user, String token,
+                                  String ipAddress, String userAgent) {
+        RefreshToken rt = RefreshToken.builder()
+                .user(user)
+                .token(token)
+                .revoked(false)
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .ipAddress(ipAddress)
+                .userAgent(userAgent)
+                .build();
         refreshTokenRepository.save(rt);
     }
 }
