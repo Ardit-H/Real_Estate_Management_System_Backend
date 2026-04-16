@@ -56,17 +56,14 @@ public class HibernateTenantConfig {
         // Dialect
         props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 
-        // Flyway menaxhon DDL — Hibernate vetëm validate
-        props.put("hibernate.hbm2ddl.auto", "validate");
+        // Flyway menaxhon DDL — Hibernate none
+        props.put("hibernate.hbm2ddl.auto", "none");
 
         // Formatim SQL (dev)
         props.put("hibernate.format_sql", "true");
         props.put("hibernate.show_sql", "false");
 
-        // ── KRITIKE: default_schema = public ─────────────────
-        // Entity-t globale (users, tenants_company, etj.) janë
-        // në public schema — kjo siguron fallback korrekt
-        props.put("hibernate.default_schema", "public");
+
 
         factory.setJpaPropertyMap(props);
 
