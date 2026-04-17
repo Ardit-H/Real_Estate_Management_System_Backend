@@ -33,7 +33,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final SchemaProvisioningService provisioningService;
 
-    // ================= REGISTER =================
+
     @Transactional
     public AuthResponse register(RegisterRequest req,
                                  String ipAddress, String userAgent) {
@@ -74,7 +74,7 @@ public class AuthService {
         return buildAuthResponse(user, tenant, schemaName, ipAddress, userAgent);
     }
 
-    // ================= LOGIN =================
+
     @Transactional
     public AuthResponse login(LoginRequest req,
                               String ipAddress, String userAgent) {
@@ -90,13 +90,13 @@ public class AuthService {
             throw new UnauthorizedException("Tenant i çaktivizuar");
         }
 
-        // ✅ FIX: proviziono nëse schema mungon — mos lejo fallback të heshtur
+
         String schemaName = provisioningService.provisionIfNeeded(user.getTenant());
 
         return buildAuthResponse(user, user.getTenant(), schemaName, ipAddress, userAgent);
     }
 
-    // ================= REFRESH =================
+
     @Transactional
     public RefreshResponse refresh(RefreshRequest req) {
 
@@ -130,7 +130,7 @@ public class AuthService {
         return new RefreshResponse(newAccessToken);
     }
 
-    // ================= LOGOUT =================
+
     @Transactional
     public void logout(String refreshToken) {
         refreshTokenRepository.findByToken(refreshToken)
@@ -140,7 +140,7 @@ public class AuthService {
                 });
     }
 
-    // ================= HELPERS =================
+
     private AuthResponse buildAuthResponse(User user, TenantCompany tenant,
                                            String schemaName,
                                            String ipAddress, String userAgent) {
@@ -161,7 +161,7 @@ public class AuthService {
         );
     }
 
-    // ✅ FIX: tani ruan IP dhe User-Agent
+
     private void saveRefreshToken(User user, String token,
                                   String ipAddress, String userAgent) {
         RefreshToken rt = RefreshToken.builder()

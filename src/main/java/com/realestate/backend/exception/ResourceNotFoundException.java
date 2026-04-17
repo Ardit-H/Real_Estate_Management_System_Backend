@@ -10,7 +10,7 @@ public class ResourceNotFoundException extends RuntimeException {
         super(message);
     }
 
-    // Helper factory — p.sh. ResourceNotFoundException.of("Property", 42)
+
     public static ResourceNotFoundException of(String resource, Object id) {
         return new ResourceNotFoundException(
                 resource + " me id=" + id + " nuk u gjet"

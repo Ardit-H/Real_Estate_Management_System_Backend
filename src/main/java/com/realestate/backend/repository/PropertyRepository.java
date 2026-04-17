@@ -16,35 +16,29 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * PropertyRepository
- *
- * JpaSpecificationExecutor → filtrim dinamik (kërkes 20: Search & Filtering)
- * Native queries → Full-Text Search me PostgreSQL tsvector
- */
+
 @Repository
 public interface PropertyRepository
         extends JpaRepository<Property, Long>,
         JpaSpecificationExecutor<Property> {
 
-    // ── Gjej vetëm pronat aktive (soft delete) ────────────────────
+
     Optional<Property> findByIdAndDeletedAtIsNull(Long id);
 
     Page<Property> findAllByDeletedAtIsNull(Pageable pageable);
 
-    // ── Pronat e featured ─────────────────────────────────────────
+
     List<Property> findByIsFeaturedTrueAndDeletedAtIsNull();
 
-    // ── Filtrim sipas statusit ────────────────────────────────────
+
     Page<Property> findByStatusAndDeletedAtIsNull(
             PropertyStatus status, Pageable pageable);
 
-    // ── Filtrim sipas agent ───────────────────────────────────────
+
     Page<Property> findByAgentIdAndDeletedAtIsNull(
             Long agentId, Pageable pageable);
 
-    // ── Full-Text Search me PostgreSQL tsvector ───────────────────
-    // Kjo është native query — search_vector është GENERATED STORED
+
     @Query(
             value = """
             SELECT * FROM properties
@@ -64,7 +58,7 @@ public interface PropertyRepository
             Pageable pageable
     );
 
-    // ── Filtrim i avancuar me çmim + dhoma + qytet ─────────────────
+
     @Query("""
         SELECT p FROM Property p
         LEFT JOIN p.address a
@@ -88,7 +82,7 @@ public interface PropertyRepository
             Pageable pageable
     );
 
-    // ── Statistika për dashboard ──────────────────────────────────
+
     @Query("""
         SELECT COUNT(p) FROM Property p
         WHERE p.status = :status
@@ -103,7 +97,7 @@ public interface PropertyRepository
     """)
     Long countByAgent(@Param("agentId") Long agentId);
 
-    // ── Ndrysho statusin direkt (pa load entity) ─────────────────
+
     @Modifying
     @Query("""
         UPDATE Property p
@@ -113,7 +107,7 @@ public interface PropertyRepository
     void updateStatus(@Param("id") Long id,
                       @Param("status") PropertyStatus status);
 
-    // ── Incremento view count ─────────────────────────────────────
+
     @Modifying
     @Query("""
         UPDATE Property p
@@ -122,7 +116,7 @@ public interface PropertyRepository
     """)
     void incrementViewCount(@Param("id") Long id);
 
-    // ── Soft delete ───────────────────────────────────────────────
+
     @Modifying
     @Query("""
         UPDATE Property p

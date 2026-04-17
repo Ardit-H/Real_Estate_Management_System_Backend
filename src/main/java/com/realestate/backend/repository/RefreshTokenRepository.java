@@ -14,9 +14,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByToken(String token);
 
-    // ----------------------------------------------------
-    // REVOKE ALL USER TOKENS
-    // ----------------------------------------------------
+
     @Modifying
     @Transactional
     @Query("""
@@ -26,9 +24,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     """)
     void revokeAllForUser(@Param("userId") Long userId);
 
-    // ----------------------------------------------------
-    // DELETE EXPIRED + REVOKED TOKENS
-    // ----------------------------------------------------
+
     @Modifying
     @Transactional
     @Query("""
@@ -38,9 +34,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     """)
     int deleteExpiredAndRevoked(@Param("now") LocalDateTime now);
 
-    // ----------------------------------------------------
-    // VALID TOKEN CHECK
-    // ----------------------------------------------------
+
     @Query("""
         SELECT CASE WHEN COUNT(rt) > 0 THEN true ELSE false END
         FROM RefreshToken rt

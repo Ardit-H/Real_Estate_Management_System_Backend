@@ -9,7 +9,7 @@ public class InvalidStateException extends RuntimeException {
         super(message);
     }
 
-    // p.sh. InvalidStateException.forProperty(1L, "SOLD", "AVAILABLE")
+
     public static InvalidStateException forProperty(Long id,
                                                     String current,
                                                     String required) {

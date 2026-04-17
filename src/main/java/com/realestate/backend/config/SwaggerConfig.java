@@ -13,15 +13,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-/**
- * SwaggerConfig — konfiguron Swagger UI me JWT Bearer support.
- *
- * Pas konfigurimit:
- *   1. Hap http://localhost:8080/swagger-ui.html
- *   2. Kliko "Authorize" (butoni me dry)
- *   3. Vendos: Bearer <token_nga_login>
- *   4. Të gjitha endpoint-et do dërgojnë JWT automatikisht
- */
+
 @Configuration
 public class SwaggerConfig {
 

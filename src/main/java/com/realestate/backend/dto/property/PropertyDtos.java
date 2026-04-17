@@ -1,10 +1,5 @@
 package com.realestate.backend.dto.property;
 
-// ============================================================
-// PROPERTY DTOs
-// Të gjitha në një fajll për lexueshmëri — ndaji sipas nevojës
-// ============================================================
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.realestate.backend.entity.enums.ListingType;
 import com.realestate.backend.entity.enums.PropertyStatus;
@@ -16,11 +11,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-// ── Address ──────────────────────────────────────────────────
+
 
 public class PropertyDtos {
 
-    // ── ADDRESS ──────────────────────────────────────────────
 
     public record AddressRequest(
             String street,
@@ -45,7 +39,7 @@ public class PropertyDtos {
             BigDecimal longitude
     ) {}
 
-    // ── PROPERTY CREATE / UPDATE ──────────────────────────────
+
 
     public record PropertyCreateRequest(
 
@@ -113,7 +107,7 @@ public class PropertyDtos {
             List<String> features
     ) {}
 
-    // ── STATUS PATCH ─────────────────────────────────────────
+
 
     public record PropertyStatusRequest(
             @NotNull(message = "Statusi është i detyrueshëm")
@@ -121,7 +115,7 @@ public class PropertyDtos {
             PropertyStatus status
     ) {}
 
-    // ── IMAGE ────────────────────────────────────────────────
+
 
     public record PropertyImageResponse(
             Long id,
@@ -131,7 +125,7 @@ public class PropertyDtos {
             @JsonProperty("is_primary")  Boolean isPrimary
     ) {}
 
-    // ── PROPERTY RESPONSE ────────────────────────────────────
+
 
     public record PropertyResponse(
             Long id,
@@ -159,7 +153,7 @@ public class PropertyDtos {
             @JsonProperty("updated_at")    LocalDateTime updatedAt
     ) {}
 
-    // ── SUMMARY (për listim — pa description të plotë) ───────
+
 
     public record PropertySummaryResponse(
             Long id,
@@ -181,7 +175,7 @@ public class PropertyDtos {
             @JsonProperty("created_at")    LocalDateTime createdAt
     ) {}
 
-    // ── FILTER REQUEST (query params → DTO) ──────────────────
+
 
     public record PropertyFilterRequest(
             @JsonProperty("min_price")    BigDecimal minPrice,
@@ -202,7 +196,7 @@ public class PropertyDtos {
             String currency
     ) {}
 
-    // ── PRICE HISTORY ────────────────────────────────────────
+
 
     public record PriceHistoryResponse(
             Long id,

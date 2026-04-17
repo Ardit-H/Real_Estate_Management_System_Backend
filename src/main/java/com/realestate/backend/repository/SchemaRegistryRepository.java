@@ -20,9 +20,7 @@ public interface SchemaRegistryRepository extends JpaRepository<TenantSchemaRegi
 
     boolean existsBySchemaName(String schemaName);
 
-    // ----------------------------------------------------
-    // MARK AS PROVISIONED
-    // ----------------------------------------------------
+
     @Modifying
     @Transactional
     @Query("""

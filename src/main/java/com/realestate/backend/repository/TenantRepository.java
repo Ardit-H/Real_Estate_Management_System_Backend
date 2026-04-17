@@ -18,9 +18,7 @@ public interface TenantRepository extends JpaRepository<TenantCompany, Long> {
 
     boolean existsByName(String name);
 
-    // ----------------------------------------------------
-    // ACTIVE TENANT ONLY
-    // ----------------------------------------------------
+
     @Query("""
         SELECT t FROM TenantCompany t
         WHERE t.slug = :slug

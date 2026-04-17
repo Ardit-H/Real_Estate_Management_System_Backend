@@ -25,7 +25,7 @@ public class PropertyService {
     private final PropertyRepository            propertyRepository;
     private final PropertyPriceHistoryRepository priceHistoryRepository;
 
-    // ── Listim me pagination ─────────────────────────────────────
+
     @Transactional(readOnly = true)
     public Page<PropertySummaryResponse> getAll(Pageable pageable) {
         return propertyRepository
@@ -33,7 +33,7 @@ public class PropertyService {
                 .map(this::toSummary);
     }
 
-    // ── Detaj i plotë ────────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public PropertyResponse getById(Long id) {
         Property p = findActive(id);
@@ -41,7 +41,7 @@ public class PropertyService {
         return toResponse(p);
     }
 
-    // ── Krijo pronë ──────────────────────────────────────────────
+
     @Transactional
     public PropertyResponse create(PropertyCreateRequest req) {
         Long agentId = TenantContext.getUserId();
@@ -64,12 +64,12 @@ public class PropertyService {
                 .isFeatured(req.isFeatured() != null ? req.isFeatured() : false)
                 .build();
 
-        // Adresa
+
         if (req.address() != null) {
             property.setAddress(buildAddress(req.address()));
         }
 
-        // Features
+
         if (req.features() != null) {
             List<PropertyFeature> featureList = req.features().stream()
                     .map(f -> PropertyFeature.builder()
@@ -86,13 +86,13 @@ public class PropertyService {
         return toResponse(saved);
     }
 
-    // ── Ndrysho pronë ────────────────────────────────────────────
+
     @Transactional
     public PropertyResponse update(Long id, PropertyUpdateRequest req) {
         Property property = findActive(id);
         assertCanModify(property);
 
-        // Regjistro historikun e çmimit nëse ndryshon
+
         if (req.price() != null && !req.price().equals(property.getPrice())) {
             savePriceHistory(property, req.price(), "Ndryshim çmimi");
         }
@@ -129,7 +129,7 @@ public class PropertyService {
         return toResponse(propertyRepository.save(property));
     }
 
-    // ── Fshij (soft delete) ───────────────────────────────────────
+
     @Transactional
     public void delete(Long id) {
         findActive(id);
@@ -138,7 +138,7 @@ public class PropertyService {
         log.info("Prona id={} u fshi (soft delete)", id);
     }
 
-    // ── Ndrysho statusin ─────────────────────────────────────────
+
     @Transactional
     public PropertyResponse updateStatus(Long id, PropertyStatusRequest req) {
         findActive(id);
@@ -146,14 +146,14 @@ public class PropertyService {
         return toResponse(findActive(id));
     }
 
-    // ── Pronat e featured ─────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public List<PropertySummaryResponse> getFeatured() {
         return propertyRepository.findByIsFeaturedTrueAndDeletedAtIsNull()
                 .stream().map(this::toSummary).toList();
     }
 
-    // ── Full-Text Search ──────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public Page<PropertySummaryResponse> search(String keyword, Pageable pageable) {
         return propertyRepository
@@ -161,7 +161,7 @@ public class PropertyService {
                 .map(this::toSummary);
     }
 
-    // ── Filtrim i avancuar (Specification) ────────────────────────
+
     @Transactional(readOnly = true)
     public Page<PropertySummaryResponse> filter(PropertyFilterRequest req, Pageable pageable) {
         var filter = new PropertySpecification.PropertyFilter(
@@ -180,7 +180,7 @@ public class PropertyService {
                 .map(this::toSummary);
     }
 
-    // ── Historiku i çmimit ────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public List<PriceHistoryResponse> getPriceHistory(Long propertyId) {
         findActive(propertyId);
@@ -193,7 +193,7 @@ public class PropertyService {
                 .toList();
     }
 
-    // ── Pronat e agjentit ─────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public Page<PropertySummaryResponse> getByAgent(Long agentId, Pageable pageable) {
         return propertyRepository
@@ -201,7 +201,7 @@ public class PropertyService {
                 .map(this::toSummary);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────
+
 
     private Property findActive(Long id) {
         return propertyRepository.findByIdAndDeletedAtIsNull(id)
@@ -248,7 +248,7 @@ public class PropertyService {
                 .build();
     }
 
-    // ── Mappers ───────────────────────────────────────────────────
+
 
     private PropertyResponse toResponse(Property p) {
         AddressResponse addr = p.getAddress() == null ? null : new AddressResponse(

@@ -24,7 +24,7 @@ public class PropertyController {
 
     private final PropertyService propertyService;
 
-    // ── 1. GET /api/properties — listim me pagination ─────────────
+
     @GetMapping
     @Operation(summary = "Listo të gjitha pronat (pagination)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
@@ -42,7 +42,7 @@ public class PropertyController {
         );
     }
 
-    // ── 2. GET /api/properties/search — full-text search ─────────
+
     @GetMapping("/search")
     @Operation(summary = "Kërko prona me fjalë kyçe (PostgreSQL FTS)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
@@ -56,7 +56,7 @@ public class PropertyController {
         );
     }
 
-    // ── 3. GET /api/properties/filter — filtrim i avancuar ────────
+
     @GetMapping("/filter")
     @Operation(summary = "Filtrim i avancuar (çmim, dhoma, qytet, tip, etj.)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
@@ -93,7 +93,7 @@ public class PropertyController {
         );
     }
 
-    // ── 4. GET /api/properties/featured ──────────────────────────
+
     @GetMapping("/featured")
     @Operation(summary = "Pronat e zgjedhura (featured)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
@@ -101,7 +101,7 @@ public class PropertyController {
         return ResponseEntity.ok(propertyService.getFeatured());
     }
 
-    // ── 5. GET /api/properties/{id} — detaj ──────────────────────
+
     @GetMapping("/{id}")
     @Operation(summary = "Merr detajet e një prone")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
@@ -120,7 +120,7 @@ public class PropertyController {
                 .body(propertyService.create(request));
     }
 
-    // ── 7. PUT /api/properties/{id} — ndrysho ────────────────────
+
     @PutMapping("/{id}")
     @Operation(summary = "Ndrysho pronën (ADMIN ose agjenti pronar)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
@@ -130,7 +130,7 @@ public class PropertyController {
         return ResponseEntity.ok(propertyService.update(id, request));
     }
 
-    // ── 8. PATCH /api/properties/{id}/status ─────────────────────
+
     @PatchMapping("/{id}/status")
     @Operation(summary = "Ndrysho statusin e pronës (AVAILABLE/SOLD/RENTED/etj.)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
@@ -140,7 +140,7 @@ public class PropertyController {
         return ResponseEntity.ok(propertyService.updateStatus(id, request));
     }
 
-    // ── 9. DELETE /api/properties/{id} — soft delete ─────────────
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Fshij pronën (soft delete — vetëm ADMIN)")
     @PreAuthorize("hasRole('ADMIN')")
@@ -149,7 +149,7 @@ public class PropertyController {
         return ResponseEntity.noContent().build();
     }
 
-    // ── 10. GET /api/properties/{id}/price-history ───────────────
+
     @GetMapping("/{id}/price-history")
     @Operation(summary = "Historiku i ndryshimeve të çmimit")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
@@ -158,7 +158,7 @@ public class PropertyController {
         return ResponseEntity.ok(propertyService.getPriceHistory(id));
     }
 
-    // ── 11. GET /api/properties/agent/{agentId} ───────────────────
+
     @GetMapping("/agent/{agentId}")
     @Operation(summary = "Pronat e një agjenti të caktuar")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
