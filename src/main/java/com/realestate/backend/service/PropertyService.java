@@ -1,6 +1,8 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.property.PropertyDtos.*;
+import com.realestate.backend.entity.enums.ListingType;
+import com.realestate.backend.entity.enums.PropertyStatus;
 import com.realestate.backend.entity.property.*;
 import com.realestate.backend.exception.ResourceNotFoundException;
 import com.realestate.backend.exception.UnauthorizedException;
@@ -14,6 +16,7 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -44,6 +47,9 @@ public class PropertyService {
 
     @Transactional
     public PropertyResponse create(PropertyCreateRequest req) {
+
+        validateCreate(req);
+
         Long agentId = TenantContext.getUserId();
 
         Property property = Property.builder()
@@ -51,7 +57,7 @@ public class PropertyService {
                 .title(req.title())
                 .description(req.description())
                 .type(req.type())
-                .listingType(req.listingType() != null ? req.listingType() : null)
+                .listingType(req.listingType() != null ? req.listingType() : ListingType.SALE)
                 .bedrooms(req.bedrooms())
                 .bathrooms(req.bathrooms())
                 .areaSqm(req.areaSqm())
@@ -62,16 +68,16 @@ public class PropertyService {
                 .currency(req.currency() != null ? req.currency() : "EUR")
                 .pricePerSqm(req.pricePerSqm())
                 .isFeatured(req.isFeatured() != null ? req.isFeatured() : false)
+                .status(PropertyStatus.AVAILABLE)
                 .build();
-
 
         if (req.address() != null) {
             property.setAddress(buildAddress(req.address()));
         }
 
-
         if (req.features() != null) {
             List<PropertyFeature> featureList = req.features().stream()
+                    .distinct()
                     .map(f -> PropertyFeature.builder()
                             .property(property)
                             .feature(f)
@@ -81,37 +87,41 @@ public class PropertyService {
         }
 
         Property saved = propertyRepository.save(property);
+
         log.info("Pronë e re u krijua: id={}, tenant={}",
                 saved.getId(), TenantContext.getTenantId());
+
         return toResponse(saved);
     }
 
 
     @Transactional
     public PropertyResponse update(Long id, PropertyUpdateRequest req) {
+
         Property property = findActive(id);
         assertCanModify(property);
 
+        validateUpdate(req, property);
 
         if (req.price() != null && !req.price().equals(property.getPrice())) {
             savePriceHistory(property, req.price(), "Ndryshim çmimi");
         }
 
-        if (req.title()        != null) property.setTitle(req.title());
-        if (req.description()  != null) property.setDescription(req.description());
-        if (req.type()         != null) property.setType(req.type());
-        if (req.status()       != null) property.setStatus(req.status());
-        if (req.listingType()  != null) property.setListingType(req.listingType());
-        if (req.bedrooms()     != null) property.setBedrooms(req.bedrooms());
-        if (req.bathrooms()    != null) property.setBathrooms(req.bathrooms());
-        if (req.areaSqm()      != null) property.setAreaSqm(req.areaSqm());
-        if (req.floor()        != null) property.setFloor(req.floor());
-        if (req.totalFloors()  != null) property.setTotalFloors(req.totalFloors());
-        if (req.yearBuilt()    != null) property.setYearBuilt(req.yearBuilt());
-        if (req.price()        != null) property.setPrice(req.price());
-        if (req.currency()     != null) property.setCurrency(req.currency());
-        if (req.pricePerSqm()  != null) property.setPricePerSqm(req.pricePerSqm());
-        if (req.isFeatured()   != null) property.setIsFeatured(req.isFeatured());
+        if (req.title() != null) property.setTitle(req.title());
+        if (req.description() != null) property.setDescription(req.description());
+        if (req.type() != null) property.setType(req.type());
+        if (req.status() != null) property.setStatus(req.status());
+        if (req.listingType() != null) property.setListingType(req.listingType());
+        if (req.bedrooms() != null) property.setBedrooms(req.bedrooms());
+        if (req.bathrooms() != null) property.setBathrooms(req.bathrooms());
+        if (req.areaSqm() != null) property.setAreaSqm(req.areaSqm());
+        if (req.floor() != null) property.setFloor(req.floor());
+        if (req.totalFloors() != null) property.setTotalFloors(req.totalFloors());
+        if (req.yearBuilt() != null) property.setYearBuilt(req.yearBuilt());
+        if (req.price() != null) property.setPrice(req.price());
+        if (req.currency() != null) property.setCurrency(req.currency());
+        if (req.pricePerSqm() != null) property.setPricePerSqm(req.pricePerSqm());
+        if (req.isFeatured() != null) property.setIsFeatured(req.isFeatured());
 
         if (req.address() != null) {
             property.setAddress(buildAddress(req.address()));
@@ -119,9 +129,12 @@ public class PropertyService {
 
         if (req.features() != null) {
             property.getFeatures().clear();
-            req.features().forEach(f ->
+            req.features().stream().distinct().forEach(f ->
                     property.getFeatures().add(
-                            PropertyFeature.builder().property(property).feature(f).build()
+                            PropertyFeature.builder()
+                                    .property(property)
+                                    .feature(f)
+                                    .build()
                     )
             );
         }
@@ -130,12 +143,52 @@ public class PropertyService {
     }
 
 
+
     @Transactional
     public void delete(Long id) {
         findActive(id);
-        assertIsAdmin();
         propertyRepository.softDelete(id);
         log.info("Prona id={} u fshi (soft delete)", id);
+    }
+
+
+    private void validateCreate(PropertyCreateRequest req) {
+
+        if (req.price() != null && req.price().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Çmimi nuk mund të jetë negativ");
+
+        if (req.areaSqm() != null && req.areaSqm().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Area nuk mund të jetë negative");
+
+        if (req.bedrooms() != null && req.bedrooms() < 0)
+            throw new IllegalArgumentException("Bedrooms invalid");
+
+        if (req.bathrooms() != null && req.bathrooms() < 0)
+            throw new IllegalArgumentException("Bathrooms invalid");
+
+        if (req.yearBuilt() != null && req.yearBuilt() > 3000)
+            throw new IllegalArgumentException("Year built invalid");
+
+        if (req.features() != null && req.features().size() > 50)
+            throw new IllegalArgumentException("Too many features");
+    }
+
+    private void validateUpdate(PropertyUpdateRequest req, Property property) {
+
+        if (req.price() != null && req.price().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Çmimi nuk mund të jetë negativ");
+
+        if (req.areaSqm() != null && req.areaSqm().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Area nuk mund të jetë negative");
+
+        if (req.status() != null &&
+                property.getStatus() == PropertyStatus.SOLD &&
+                req.status() != PropertyStatus.SOLD) {
+            throw new IllegalArgumentException("Property e shitur nuk mund të ndryshohet");
+        }
+
+        if (req.features() != null && req.features().size() > 50)
+            throw new IllegalArgumentException("Too many features");
     }
 
 
