@@ -62,11 +62,11 @@ public class AuthController {
         return ResponseEntity.ok(new MessageResponse("U çkyçe me sukses"));
     }
 
-    // ── Merr IP reale (edhe pas proxy/load balancer) ────────────
+
     private String getClientIp(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim(); // IP e parë = klienti real
+            return xForwardedFor.split(",")[0].trim();
         }
         return request.getRemoteAddr();
     }

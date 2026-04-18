@@ -12,16 +12,12 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    // ----------------------------------------------------
-    // LOGIN
-    // ----------------------------------------------------
+
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
 
-    // ----------------------------------------------------
-    // ACTIVE USER ONLY
-    // ----------------------------------------------------
+
     @Query("""
         SELECT u FROM User u
         WHERE u.email = :email
@@ -30,9 +26,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     """)
     Optional<User> findActiveByEmail(@Param("email") String email);
 
-    // ----------------------------------------------------
-    // USERS BY TENANT
-    // ----------------------------------------------------
+
     @Query("""
         SELECT u FROM User u
         WHERE u.tenant.id = :tenantId
@@ -41,14 +35,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     """)
     List<User> findAllByTenantId(@Param("tenantId") Long tenantId);
 
-    // ----------------------------------------------------
-    // COUNT BY ROLE (FIXED → ENUM)
-    // ----------------------------------------------------
+
     long countByTenant_IdAndRole(Long tenantId, Role role);
 
-    // ----------------------------------------------------
-    // OPTIONAL: ACTIVE USERS ONLY
-    // ----------------------------------------------------
+
     @Query("""
         SELECT u FROM User u
         WHERE u.tenant.id = :tenantId

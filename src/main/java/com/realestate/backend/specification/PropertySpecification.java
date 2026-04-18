@@ -13,24 +13,12 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * PropertySpecification — filtrim dinamik me JPA Criteria API.
- *
- * Plotëson kërkesën 20: Search dhe Filtering System.
- * Kombinon kushte arbitrare pa ndërtuar query strings manualisht.
- *
- * Përdorim:
- *   Specification<Property> spec = PropertySpecification.build(filter);
- *   propertyRepository.findAll(spec, pageable);
- */
+
 public class PropertySpecification {
 
     private PropertySpecification() {}
 
-    /**
-     * Filter DTO — të gjitha fushat janë nullable.
-     * NULL = ky kriter injorohet.
-     */
+
     public record PropertyFilter(
             BigDecimal    minPrice,
             BigDecimal    maxPrice,
@@ -50,18 +38,15 @@ public class PropertySpecification {
             String        currency
     ) {}
 
-    /**
-     * Ndërto Specification nga PropertyFilter.
-     * Çdo kriter shtohet vetëm nëse vlera nuk është null.
-     */
+
     public static Specification<Property> build(PropertyFilter f) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Gjithmonë: mos shfaq pronat e fshira
+
             predicates.add(cb.isNull(root.get("deletedAt")));
 
-            // ── Çmimi ────────────────────────────────────────────
+
             if (f.minPrice() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("price"), f.minPrice()));
             }
@@ -69,7 +54,7 @@ public class PropertySpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("price"), f.maxPrice()));
             }
 
-            // ── Dhoma gjumi ──────────────────────────────────────
+
             if (f.minBedrooms() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("bedrooms"), f.minBedrooms()));
             }
@@ -77,12 +62,12 @@ public class PropertySpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("bedrooms"), f.maxBedrooms()));
             }
 
-            // ── Banjo ────────────────────────────────────────────
+
             if (f.minBathrooms() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("bathrooms"), f.minBathrooms()));
             }
 
-            // ── Sipërfaqe ────────────────────────────────────────
+
             if (f.minArea() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("areaSqm"), f.minArea()));
             }
@@ -90,7 +75,7 @@ public class PropertySpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("areaSqm"), f.maxArea()));
             }
 
-            // ── Adresa (JOIN me Address) ──────────────────────────
+
             if (f.city() != null && !f.city().isBlank()) {
                 Join<Property, Address> addressJoin = root.join("address", JoinType.LEFT);
                 predicates.add(cb.like(
@@ -106,7 +91,7 @@ public class PropertySpecification {
                 ));
             }
 
-            // ── Tipi, listing type, statusi ──────────────────────
+
             if (f.type() != null) {
                 predicates.add(cb.equal(root.get("type"), f.type()));
             }
@@ -117,12 +102,12 @@ public class PropertySpecification {
                 predicates.add(cb.equal(root.get("status"), f.status()));
             }
 
-            // ── Featured ─────────────────────────────────────────
+
             if (f.isFeatured() != null) {
                 predicates.add(cb.equal(root.get("isFeatured"), f.isFeatured()));
             }
 
-            // ── Viti ndërtimit ───────────────────────────────────
+
             if (f.minYearBuilt() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("yearBuilt"), f.minYearBuilt()));
             }
@@ -130,7 +115,7 @@ public class PropertySpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("yearBuilt"), f.maxYearBuilt()));
             }
 
-            // ── Valuta ───────────────────────────────────────────
+
             if (f.currency() != null && !f.currency().isBlank()) {
                 predicates.add(cb.equal(root.get("currency"), f.currency().toUpperCase()));
             }

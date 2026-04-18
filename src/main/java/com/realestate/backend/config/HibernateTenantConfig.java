@@ -41,25 +41,25 @@ public class HibernateTenantConfig {
         vendorAdapter.setGenerateDdl(false);
         factory.setJpaVendorAdapter(vendorAdapter);
 
-        // ── Hibernate multitenancy properties ────────────────
+
         Map<String, Object> props = new HashMap<>();
 
-        // Aktivizo schema-based multitenancy
+
         props.put("hibernate.multiTenancy", "SCHEMA");
 
-        // Connection provider — ndërron search_path per-request
+
         props.put("hibernate.multi_tenant_connection_provider", connectionProvider);
 
-        // Resolver — lexon schema_name nga TenantContext (ThreadLocal)
+
         props.put("hibernate.tenant_identifier_resolver", tenantIdentifierResolver);
 
-        // Dialect
+
         props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 
-        // Flyway menaxhon DDL — Hibernate none
+
         props.put("hibernate.hbm2ddl.auto", "none");
 
-        // Formatim SQL (dev)
+       
         props.put("hibernate.format_sql", "true");
         props.put("hibernate.show_sql", "false");
 

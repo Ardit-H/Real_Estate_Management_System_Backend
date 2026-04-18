@@ -11,16 +11,6 @@ import org.springframework.lang.NonNull;
 
 import java.io.IOException;
 
-/**
- * LoggingFilter — Middleware për logging të çdo request/response.
- *
- * Plotëson kërkesën 9: Middleware për logging dhe autentikim.
- * @Order(1) — ekzekutohet para JwtAuthFilter (Order default = 0 për security).
- *
- * Çfarë regjistron:
- *   → Method, path, IP, User-Agent, tenant (nëse autentikuar)
- *   ← Status code, kohëzgjatja
- */
 @Slf4j
 @Component
 @Order(1)
@@ -48,8 +38,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             Long tenantId  = TenantContext.getTenantId();
             Long userId    = TenantContext.getUserId();
 
-            // Formato log:
-            // → GET /api/properties [200] 45ms | tenant=1 user=3 | ip=127.0.0.1
+
             if (tenantId != null) {
                 log.info("→ {} {} [{}] {}ms | tenant={} user={} | ip={}",
                         method, path, status, duration,
@@ -59,7 +48,7 @@ public class LoggingFilter extends OncePerRequestFilter {
                         method, path, status, duration, ip);
             }
 
-            // Logje të detajuara vetëm për error
+
             if (status >= 400) {
                 log.warn("→ ERROR {} {} [{}] | ip={} | user-agent={}",
                         method, path, status, ip,
