@@ -16,24 +16,19 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
 
-      # KRITIKE për multitenancy:
-      # siguron default schema për çdo connection
+      # KRITIKE për multitenancy
       connection-init-sql: "SET search_path = public"
 
   # ==================== JPA ====================
   jpa:
     hibernate:
       ddl-auto: none
-
     show-sql: true
 
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-
-        # ❌ MOS SHTO multiTenancy këtu
-        # Hibernate MultiTenancy konfigurohet vetëm në Java config
 
   # ==================== FLYWAY ====================
   flyway:
@@ -65,11 +60,24 @@ spring:
           starttls:
             enable: true
 
+  # ==================== FILE UPLOAD ====================
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+# ==================== CUSTOM APP CONFIG ====================
+app:
+  upload:
+    dir: ./uploads
+    max-size-mb: 5
+
 # ==================== JWT ====================
 jwt:
   secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-  expiration-ms: 3600000          # 1 orë (access token)
-  refresh-expiration-ms: 604800000 # 7 ditë (refresh token)
+  expiration-ms: 3600000
+  refresh-expiration-ms: 604800000
 
 # ==================== ACTUATOR ====================
 management:
@@ -88,9 +96,9 @@ server:
   servlet:
     context-path: /
 
-    error:
-      include-message: always
-      include-binding-errors: always
+  error:
+    include-message: always
+    include-binding-errors: always
 
 # ==================== SWAGGER ====================
 springdoc:

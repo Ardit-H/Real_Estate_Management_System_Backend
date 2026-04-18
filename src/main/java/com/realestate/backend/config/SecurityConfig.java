@@ -44,7 +44,8 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/uploads/**"
                         ).permitAll()
 
                         // PROPERTIES
@@ -58,7 +59,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "AGENT")
 
                         .requestMatchers(HttpMethod.DELETE, "/api/properties/**")
-                        .hasRole("ADMIN")
+                        .hasAnyRole("ADMIN","AGENT")
+
 
                         // USERS
                         .requestMatchers("/api/users/**").hasAnyRole("ADMIN", "AGENT")
