@@ -142,8 +142,8 @@ public class PropertyController {
 
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Fshij pronën (soft delete — vetëm ADMIN)")
-    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Fshij pronën (soft delete —ADMIN dhe AGENT)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENT')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         propertyService.delete(id);
         return ResponseEntity.noContent().build();
