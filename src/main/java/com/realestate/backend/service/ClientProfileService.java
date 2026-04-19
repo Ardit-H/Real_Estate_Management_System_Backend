@@ -20,11 +20,11 @@ public class ClientProfileService {
 
     private final ClientProfileRepository clientProfileRepo;
 
-    // ── Vlera të lejuara — reflektojnë CHECK constraint në DB ────────────────
+    // Vlera të lejuara — reflektojnë CHECK constraint në DB
     // preferred_contact VARCHAR(20) CHECK (preferred_contact IN ('EMAIL','PHONE','WHATSAPP'))
     private static final Set<String> VALID_CONTACT_METHODS = Set.of("EMAIL", "PHONE", "WHATSAPP");
 
-    // ── Merr profilin tim ────────────────────────────────────────────────────
+    // Merr profilin tim
     @Transactional(readOnly = true)
     public ClientProfileResponse getMyProfile() {
         Long userId = TenantContext.getUserId();
@@ -34,7 +34,7 @@ public class ClientProfileService {
                         "Profili i klientit nuk u gjet. Krijo profilin me PUT /api/users/clients/me"));
     }
 
-    // ── ADMIN/AGENT: merr profilin e klientit ────────────────────────────────
+    // ADMIN/AGENT: merr profilin e klientit
     @Transactional(readOnly = true)
     public ClientProfileResponse getByUserId(Long userId) {
         if (!TenantContext.hasRole("ADMIN", "AGENT")) {
@@ -46,12 +46,12 @@ public class ClientProfileService {
                         "Profili i klientit nuk u gjet për user: " + userId));
     }
 
-    // ── Krijo ose ndrysho profilin tim ───────────────────────────────────────
+    // Krijo ose ndrysho profilin tim
     @Transactional
     public ClientProfileResponse upsertMyProfile(ClientProfileRequest req) {
         Long userId = TenantContext.getUserId();
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         validateClientProfileRequest(req);
 
         ClientProfile profile = clientProfileRepo.findByUserId(userId)
@@ -64,7 +64,7 @@ public class ClientProfileService {
         return toResponse(saved);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private void validateClientProfileRequest(ClientProfileRequest req) {
 
@@ -135,7 +135,7 @@ public class ClientProfileService {
         if (req.photoUrl()         != null) profile.setPhotoUrl(req.photoUrl().trim());
     }
 
-    // ── Mapper ────────────────────────────────────────────────────────────────
+    // Mapper
 
     private ClientProfileResponse toResponse(ClientProfile p) {
         return new ClientProfileResponse(

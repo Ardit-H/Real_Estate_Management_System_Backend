@@ -23,11 +23,11 @@ public class UserService {
     private final UserRepository  userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    // ── Vlera të lejuara — reflektojnë CHECK constraints në DB ───────────────
+    //  Vlera të lejuara — reflektojnë CHECK constraints në DB
     // role VARCHAR(20) CHECK (role IN ('ADMIN','AGENT','CLIENT'))
     private static final Set<String> VALID_ROLES = Set.of("ADMIN", "AGENT", "CLIENT");
 
-    // ── Lista e userëve të tenant-it (ADMIN) ──────────────────────────────────
+    // Lista e userëve të tenant-it (ADMIN)
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsersInTenant() {
         assertIsAdmin();
@@ -35,7 +35,7 @@ public class UserService {
                 .stream().map(this::toResponse).toList();
     }
 
-    // ── Merr user sipas ID ────────────────────────────────────────────────────
+    // Merr user sipas ID
     @Transactional(readOnly = true)
     public UserResponse getById(Long id) {
         User user = findUser(id);
@@ -43,18 +43,18 @@ public class UserService {
         return toResponse(user);
     }
 
-    // ── Profili im ────────────────────────────────────────────────────────────
+    // Profili im
     @Transactional(readOnly = true)
     public UserResponse getMyProfile() {
         return toResponse(findUser(TenantContext.getUserId()));
     }
 
-    // ── Ndrysho profilin tim ──────────────────────────────────────────────────
+    // Ndrysho profilin tim
     @Transactional
     public UserResponse updateMyProfile(UserUpdateRequest req) {
         User user = findUser(TenantContext.getUserId());
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         if (req.firstName() != null && req.firstName().isBlank()) {
             throw new BadRequestException("Emri nuk mund të jetë bosh");
         }
@@ -86,7 +86,7 @@ public class UserService {
         return toResponse(userRepository.save(user));
     }
 
-    // ── Ndrysho fjalëkalimin ──────────────────────────────────────────────────
+    // Ndrysho fjalëkalimin
     @Transactional
     public void changePassword(ChangePasswordRequest req) {
         User user = findUser(TenantContext.getUserId());
@@ -95,7 +95,7 @@ public class UserService {
             throw new UnauthorizedException("Fjalëkalimi aktual është i gabuar");
         }
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         // min 8 karaktere + shkronja + numër — konfirmuar nga @Pattern në DTO
         // por e kontrollojmë edhe këtu si shtresë shtesë
         if (req.newPassword().length() < 8) {
@@ -115,7 +115,7 @@ public class UserService {
         log.info("Fjalëkalimi u ndryshua për user id={}", user.getId());
     }
 
-    // ── ADMIN: aktivo / çaktivizo user ───────────────────────────────────────
+    // ADMIN: aktivo / çaktivizo user
     @Transactional
     public UserResponse setUserActive(Long id, UserStatusRequest req) {
         assertIsAdmin();
@@ -133,7 +133,7 @@ public class UserService {
         return toResponse(userRepository.save(user));
     }
 
-    // ── ADMIN: ndrysho rolin ──────────────────────────────────────────────────
+    // ADMIN: ndrysho rolin
     @Transactional
     public UserResponse changeRole(Long id, UserRoleRequest req) {
         assertIsAdmin();
@@ -145,7 +145,7 @@ public class UserService {
             throw new ConflictException("Nuk mund të ndryshoni rolin tuaj");
         }
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         // Enum Role garanton vlerat e vlefshme — por kontrollo nëse null
         if (req.role() == null) {
             throw new BadRequestException("Roli është i detyrueshëm. Vlerat: " + VALID_ROLES);
@@ -157,7 +157,7 @@ public class UserService {
         return toResponse(userRepository.save(user));
     }
 
-    // ── ADMIN: soft delete ────────────────────────────────────────────────────
+    // ADMIN: soft delete
     @Transactional
     public void deleteUser(Long id) {
         assertIsAdmin();
@@ -174,7 +174,7 @@ public class UserService {
         log.info("User id={} u fshi (soft delete) nga admin id={}", id, TenantContext.getUserId());
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private User findUser(Long id) {
         return userRepository.findById(id)
@@ -195,7 +195,7 @@ public class UserService {
         }
     }
 
-    // ── Mapper ────────────────────────────────────────────────────────────────
+    // Mapper
 
     private UserResponse toResponse(User u) {
         return new UserResponse(

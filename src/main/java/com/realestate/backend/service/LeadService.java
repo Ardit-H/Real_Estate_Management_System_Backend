@@ -28,21 +28,21 @@ public class LeadService {
     private final LeadRequestRepository leadRepo;
     private final PropertyRepository    propertyRepo;
 
-    // ── Të gjitha leads (ADMIN/AGENT) ────────────────────────────────────────
+    // Të gjitha leads (ADMIN/AGENT)
     @Transactional(readOnly = true)
     public Page<LeadResponse> getAll(Pageable pageable) {
         assertIsAdminOrAgent();
         return leadRepo.findByStatusOrderByCreatedAtDesc(LeadStatus.NEW, pageable).map(this::toResponse);
     }
 
-    // ── Leads sipas statusit ──────────────────────────────────────────────────
+    // Leads sipas statusit
     @Transactional(readOnly = true)
     public Page<LeadResponse> getByStatus(LeadStatus status, Pageable pageable) {
         assertIsAdminOrAgent();
         return leadRepo.findByStatusOrderByCreatedAtDesc(status, pageable).map(this::toResponse);
     }
 
-    // ── Leads të agjentit ────────────────────────────────────────────────────
+    // Leads të agjentit
     @Transactional(readOnly = true)
     public Page<LeadResponse> getMyLeadsAsAgent(Pageable pageable) {
         assertIsAdminOrAgent();
@@ -50,27 +50,27 @@ public class LeadService {
                 .map(this::toResponse);
     }
 
-    // ── Leads të klientit ────────────────────────────────────────────────────
+    // Leads të klientit
     @Transactional(readOnly = true)
     public Page<LeadResponse> getMyLeadsAsClient(Pageable pageable) {
         return leadRepo.findByClientIdOrderByCreatedAtDesc(TenantContext.getUserId(), pageable)
                 .map(this::toResponse);
     }
 
-    // ── Leads të paassinjuara (ADMIN) ─────────────────────────────────────────
+    // Leads të paassinjuara (ADMIN)
     @Transactional(readOnly = true)
     public List<LeadResponse> getUnassigned() {
         assertIsAdmin();
         return leadRepo.findUnassigned().stream().map(this::toResponse).toList();
     }
 
-    // ── Merr sipas ID ────────────────────────────────────────────────────────
+    // Merr sipas ID
     @Transactional(readOnly = true)
     public LeadResponse getById(Long id) {
         return toResponse(findLead(id));
     }
 
-    // ── Leads sipas pronës ───────────────────────────────────────────────────
+    // Leads sipas pronës
     @Transactional(readOnly = true)
     public List<LeadResponse> getByProperty(Long propertyId) {
         assertIsAdminOrAgent();
@@ -78,11 +78,11 @@ public class LeadService {
                 .stream().map(this::toResponse).toList();
     }
 
-    // ── Krijo lead ───────────────────────────────────────────────────────────
+    // Krijo lead
     @Transactional
     public LeadResponse create(LeadCreateRequest req) {
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         if (req.type() == null) {
             throw new BadRequestException("Tipi i kërkesës është i detyrueshëm. "
                     + "Vlerat e lejuara: SELL, BUY, RENT, VALUATION");
@@ -128,14 +128,14 @@ public class LeadService {
         return toResponse(saved);
     }
 
-    // ── Asinjono agjent (ADMIN) ───────────────────────────────────────────────
+    // Asinjono agjent (ADMIN)
     @Transactional
     public LeadResponse assignAgent(Long id, LeadAssignRequest req) {
         assertIsAdmin();
 
         PropertyLeadRequest lead = findLead(id);
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         if (lead.getStatus() == LeadStatus.DONE || lead.getStatus() == LeadStatus.REJECTED) {
             throw new InvalidStateException("Leadi me status '"
                     + lead.getStatus() + "' nuk mund të asinohet");
@@ -149,7 +149,7 @@ public class LeadService {
         return toResponse(findLead(id));
     }
 
-    // ── Ndrysho statusin ──────────────────────────────────────────────────────
+    // Ndrysho statusin
     @Transactional
     public LeadResponse updateStatus(Long id, LeadStatusRequest req) {
         assertIsAdminOrAgent();
@@ -176,7 +176,7 @@ public class LeadService {
         return toResponse(findLead(id));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private PropertyLeadRequest findLead(Long id) {
         return leadRepo.findById(id)
@@ -195,7 +195,7 @@ public class LeadService {
         }
     }
 
-    // ── Mapper ────────────────────────────────────────────────────────────────
+    // Mapper
 
     private LeadResponse toResponse(PropertyLeadRequest l) {
         return new LeadResponse(

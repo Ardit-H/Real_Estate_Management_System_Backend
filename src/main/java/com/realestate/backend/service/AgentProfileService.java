@@ -20,7 +20,7 @@ public class AgentProfileService {
 
     private final AgentProfileRepository agentProfileRepo;
 
-    // ── Vlera të lejuara ──────────────────────────────────────────────────────
+    // Vlera të lejuara
     private static final int    MAX_PHONE_LENGTH         = 30;
     private static final int    MAX_LICENSE_LENGTH       = 100;
     private static final int    MAX_SPECIALIZATION_LEN   = 100;
@@ -28,7 +28,7 @@ public class AgentProfileService {
     private static final BigDecimal MAX_RATING           = BigDecimal.valueOf(5);
     private static final BigDecimal MIN_RATING           = BigDecimal.ZERO;
 
-    // ── Merr profilin tim ────────────────────────────────────────────────────
+    // Merr profilin tim
     @Transactional(readOnly = true)
     public AgentProfileResponse getMyProfile() {
         Long userId = TenantContext.getUserId();
@@ -38,7 +38,7 @@ public class AgentProfileService {
                         "Profili i agjentit nuk u gjet. Krijo profilin me PUT /api/users/agents/me"));
     }
 
-    // ── Merr profilin sipas userId ────────────────────────────────────────────
+    // Merr profilin sipas userId
     @Transactional(readOnly = true)
     public AgentProfileResponse getByUserId(Long userId) {
         return agentProfileRepo.findByUserId(userId)
@@ -47,20 +47,20 @@ public class AgentProfileService {
                         "Profili i agjentit nuk u gjet për user: " + userId));
     }
 
-    // ── Lista e të gjithë agjentëve (sipas vlerësimit) ────────────────────────
+    // Lista e të gjithë agjentëve (sipas vlerësimit)
     @Transactional(readOnly = true)
     public List<AgentProfileResponse> getAllAgents() {
         return agentProfileRepo.findAllByOrderByRatingDesc()
                 .stream().map(this::toResponse).toList();
     }
 
-    // ── Krijo ose ndrysho profilin tim ───────────────────────────────────────
+    // Krijo ose ndrysho profilin tim
     @Transactional
     public AgentProfileResponse upsertMyProfile(AgentProfileRequest req) {
         assertIsAgent();
         Long userId = TenantContext.getUserId();
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         validateAgentProfileRequest(req);
 
         AgentProfile profile = agentProfileRepo.findByUserId(userId)
@@ -73,14 +73,14 @@ public class AgentProfileService {
         return toResponse(saved);
     }
 
-    // ── ADMIN: ndrysho profilin e çdo agjenti ────────────────────────────────
+    // ADMIN: ndrysho profilin e çdo agjenti
     @Transactional
     public AgentProfileResponse updateProfile(Long userId, AgentProfileRequest req) {
         if (!TenantContext.hasRole("ADMIN")) {
             throw new ForbiddenException("Vetëm ADMIN mund të ndryshojë profil tjetër");
         }
 
-        // ── Validime ─────────────────────────────────────────────────────────
+        // Validime
         validateAgentProfileRequest(req);
 
         AgentProfile profile = agentProfileRepo.findByUserId(userId)
@@ -94,7 +94,7 @@ public class AgentProfileService {
         return toResponse(saved);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private void validateAgentProfileRequest(AgentProfileRequest req) {
         if (req.phone() != null) {

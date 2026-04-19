@@ -30,7 +30,7 @@ public class SaleService {
     private final SalePaymentRepository  paymentRepo;
     private final PropertyRepository     propertyRepo;
 
-    // ── Vlerat e lejuara (reflektojnë CHECK constraints në DB) ──────────────
+    // Vlerat e lejuara (reflektojnë CHECK constraints në DB)
     private static final Set<String> VALID_CURRENCIES     = Set.of("EUR", "USD", "ALL", "GBP", "CHF");
     private static final Set<String> VALID_CONTRACT_STATUS = Set.of("PENDING", "COMPLETED", "CANCELLED");
     private static final Set<String> VALID_PAYMENT_TYPES  = Set.of("DEPOSIT", "INSTALLMENT", "FULL", "COMMISSION");
@@ -38,7 +38,7 @@ public class SaleService {
     private static final Set<String> VALID_PAYMENT_METHODS =
             Set.of("BANK_TRANSFER", "CASH", "CARD", "CHECK", "ONLINE");
 
-    // ══════════════════ SALE LISTINGS ═══════════════════════════════════════
+    // ================ SALE LISTINGS ==============================
 
     @Transactional(readOnly = true)
     public Page<SaleListingResponse> getAllListings(Pageable pageable) {
@@ -65,7 +65,7 @@ public class SaleService {
     public SaleListingResponse createListing(SaleListingCreateRequest req) {
         assertIsAdminOrAgent();
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if (req.price() == null || req.price().compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("Çmimi duhet të jetë 0 ose më i madh");
         }
@@ -99,7 +99,7 @@ public class SaleService {
         SaleListing listing = findActiveListing(id);
         assertCanModifyListing(listing);
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if (req.price() != null && req.price().compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("Çmimi nuk mund të jetë negativ");
         }
@@ -125,7 +125,7 @@ public class SaleService {
         log.info("SaleListing id={} u fshi (soft delete)", id);
     }
 
-    // ══════════════════ SALE CONTRACTS ═══════════════════════════════════════
+    // ======================= SALE CONTRACTS ==========================
 
     @Transactional(readOnly = true)
     public Page<SaleContractResponse> getAllContracts(Pageable pageable) {
@@ -160,7 +160,7 @@ public class SaleService {
     public SaleContractResponse createContract(SaleContractCreateRequest req) {
         assertIsAdminOrAgent();
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if (req.salePrice() == null || req.salePrice().compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("Çmimi i shitjes duhet të jetë 0 ose më i madh");
         }
@@ -210,7 +210,7 @@ public class SaleService {
         assertIsAdminOrAgent();
         SaleContract contract = findContract(id);
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if ("COMPLETED".equals(contract.getStatus()) || "CANCELLED".equals(contract.getStatus())) {
             throw new ConflictException("Kontratat e mbyllura nuk mund të ndryshohen");
         }
@@ -241,7 +241,7 @@ public class SaleService {
         assertIsAdminOrAgent();
         SaleContract contract = findContract(id);
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if (!VALID_CONTRACT_STATUS.contains(req.status())) {
             throw new BadRequestException("Statusi i pavlefshëm: " + req.status()
                     + ". Vlerat e lejuara: " + VALID_CONTRACT_STATUS);
@@ -261,7 +261,7 @@ public class SaleService {
         return toContractResponse(findContract(id));
     }
 
-    // ══════════════════ SALE PAYMENTS ════════════════════════════════════════
+    // ======================== SALE PAYMENTS ==========================
 
     @Transactional(readOnly = true)
     public List<SalePaymentResponse> getPaymentsByContract(Long contractId) {
@@ -286,7 +286,7 @@ public class SaleService {
     public SalePaymentResponse createPayment(SalePaymentCreateRequest req) {
         assertIsAdminOrAgent();
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if (req.amount() == null || req.amount().compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("Shuma duhet të jetë 0 ose më e madhe");
         }
@@ -331,7 +331,7 @@ public class SaleService {
         SalePayment payment = paymentRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pagesa nuk u gjet: " + id));
 
-        // ── Validime ────────────────────────────────────────────────────────
+        // Validime
         if ("PAID".equals(payment.getStatus())) {
             throw new ConflictException("Pagesa #" + id + " është tashmë e paguar");
         }
@@ -355,7 +355,7 @@ public class SaleService {
         return toPaymentResponse(paymentRepo.save(payment));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private SaleListing findActiveListing(Long id) {
         return listingRepo.findByIdAndDeletedAtIsNull(id)
@@ -380,7 +380,7 @@ public class SaleService {
         }
     }
 
-    // ── Mappers ───────────────────────────────────────────────────────────────
+    // Mappers
 
     private SaleListingResponse toListingResponse(SaleListing l) {
         return new SaleListingResponse(
