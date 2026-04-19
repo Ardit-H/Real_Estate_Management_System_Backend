@@ -39,7 +39,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // PUBLIC
+                        // ── PUBLIC ────────────────────────────────────────────────────
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/swagger-ui/**",
@@ -48,43 +48,57 @@ public class SecurityConfig {
                                 "/uploads/**"
                         ).permitAll()
 
-                        // PROPERTIES
-                        .requestMatchers(HttpMethod.GET, "/api/properties/**")
-                        .hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        // ── PROPERTIES ────────────────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET,    "/api/properties/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.POST,   "/api/properties").hasAnyRole("ADMIN", "AGENT")
+                        .requestMatchers(HttpMethod.PUT,    "/api/properties/**").hasAnyRole("ADMIN", "AGENT")
+                        .requestMatchers(HttpMethod.DELETE, "/api/properties/**").hasAnyRole("ADMIN", "AGENT")
 
-                        .requestMatchers(HttpMethod.POST, "/api/properties")
-                        .hasAnyRole("ADMIN", "AGENT")
+                        // ── USERS — profili personal (të gjithë rolet) ────────────────
+                        .requestMatchers(HttpMethod.GET,   "/api/users/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PUT,   "/api/users/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/api/users/me/password").hasAnyRole("ADMIN", "AGENT", "CLIENT")
 
-                        .requestMatchers(HttpMethod.PUT, "/api/properties/**")
-                        .hasAnyRole("ADMIN", "AGENT")
+                        // ── USERS — agent profiles ────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/users/agents/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/agents/me").hasAnyRole("ADMIN", "AGENT")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/agents/**").hasRole("ADMIN")
 
-                        .requestMatchers(HttpMethod.DELETE, "/api/properties/**")
-                        .hasAnyRole("ADMIN","AGENT")
+                        // ── USERS — client profiles ───────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/users/clients/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/clients/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/api/users/clients/**").hasAnyRole("ADMIN", "AGENT")
 
+                        // ── USERS — admin operacione ──────────────────────────────────
+                        .requestMatchers(HttpMethod.GET,    "/api/users").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET,    "/api/users/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PATCH,  "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
 
-                        // USERS
-                        .requestMatchers("/api/users/**").hasAnyRole("ADMIN", "AGENT")
+                        // ── LEADS ─────────────────────────────────────────────────────
+                        .requestMatchers(HttpMethod.POST, "/api/leads").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.GET,  "/api/leads/my/client").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.GET,  "/api/leads/**").hasAnyRole("ADMIN", "AGENT")
+                        .requestMatchers(HttpMethod.PATCH,"/api/leads/**").hasAnyRole("ADMIN", "AGENT")
 
-                        // LEADS
-                        .requestMatchers(HttpMethod.POST, "/api/leads")
-                        .hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        // ── SALES ─────────────────────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/sales/listings/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers("/api/sales/**").hasAnyRole("ADMIN", "AGENT")
 
-                        .requestMatchers(HttpMethod.GET, "/api/leads/**")
-                        .hasAnyRole("ADMIN", "AGENT")
-
-                        // CONTRACTS + PAYMENTS
+                        // ── CONTRACTS + PAYMENTS ──────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/contracts/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
                         .requestMatchers("/api/contracts/**").hasAnyRole("ADMIN", "AGENT")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
                         .requestMatchers("/api/payments/**").hasAnyRole("ADMIN", "AGENT")
 
-                        // AI
+                        // ── AI ────────────────────────────────────────────────────────
                         .requestMatchers("/api/ai/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
 
-                        // ADMIN
+                        // ── ADMIN ─────────────────────────────────────────────────────
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        .anyRequest().fullyAuthenticated()
+                        .anyRequest().authenticated()
                 )
-
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class).exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, authEx) -> {
                             res.setStatus(401);
