@@ -1,4 +1,4 @@
-// ── PaymentStatus.java ───────────────────────────────────────
+
 package com.realestate.backend.entity.enums;
 
 public enum PaymentStatus {
