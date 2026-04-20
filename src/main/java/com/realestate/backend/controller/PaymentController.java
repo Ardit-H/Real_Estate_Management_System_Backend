@@ -36,7 +36,7 @@ public class PaymentController {
     // ── 2. GET /api/payments/contract/{contractId} ────────────────
     @GetMapping("/contract/{contractId}")
     @Operation(summary = "Merr të gjitha pagesat e një kontrate")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT', 'CLIENT')")
     public ResponseEntity<List<PaymentResponse>> getByContract(
             @PathVariable Long contractId) {
         return ResponseEntity.ok(paymentService.getByContract(contractId));
@@ -45,7 +45,7 @@ public class PaymentController {
     // ── 3. GET /api/payments/contract/{contractId}/summary ────────
     @GetMapping("/contract/{contractId}/summary")
     @Operation(summary = "Statistikat e pagesave për kontratën — total, pending, overdue")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<PaymentSummaryResponse> getSummary(
             @PathVariable Long contractId) {
         return ResponseEntity.ok(paymentService.getSummaryByContract(contractId));
@@ -54,7 +54,7 @@ public class PaymentController {
     // ── 4. GET /api/payments/status/{status} ──────────────────────
     @GetMapping("/status/{status}")
     @Operation(summary = "Filtro pagesat sipas statusit")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT', 'CLIENT')")
     public ResponseEntity<Page<PaymentResponse>> getByStatus(
             @PathVariable PaymentStatus status,
             @RequestParam(defaultValue = "0")  int page,

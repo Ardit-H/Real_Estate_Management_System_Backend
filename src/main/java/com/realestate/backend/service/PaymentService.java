@@ -35,7 +35,7 @@ public class PaymentService {
     // ── Queries ───────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public List<PaymentResponse> getByContract(Long contractId) {
-        assertIsAdminOrAgent();
+      //assertIsAdminOrAgent();
         if (contractId == null || contractId <= 0)
             throw new IllegalArgumentException("contractId invalid");
         return paymentRepo.findByContract_IdOrderByDueDateAsc(contractId)
@@ -136,7 +136,7 @@ public class PaymentService {
     // ── Summary ───────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public PaymentSummaryResponse getSummaryByContract(Long contractId) {
-        assertIsAdminOrAgent();
+        //assertIsAdminOrAgent();
         List<PaymentResponse> payments = paymentRepo
                 .findByContract_IdOrderByDueDateAsc(contractId)
                 .stream().map(this::toResponse).toList();
