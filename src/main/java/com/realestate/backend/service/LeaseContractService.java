@@ -18,6 +18,7 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -27,35 +28,31 @@ import java.util.List;
 public class LeaseContractService {
 
     private final LeaseContractRepository contractRepo;
-    private final PropertyRepository       propertyRepo;
-    private final RentalListingRepository  listingRepo;
+    private final PropertyRepository      propertyRepo;
+    private final RentalListingRepository listingRepo;
 
-    // ── Listim me pagination ─────────────────────────────────────
+    private static final List<String> VALID_CURRENCIES = List.of("EUR","USD","GBP","CHF","ALL","MKD");
+
+    // ── Listim ───────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeaseContractSummary> getAll(Pageable pageable) {
         return contractRepo.findByStatusOrderByCreatedAtDesc(LeaseStatus.ACTIVE, pageable)
                 .map(this::toSummary);
     }
 
-    // ── Detaj i plotë ────────────────────────────────────────────
     @Transactional(readOnly = true)
     public LeaseContractResponse getById(Long id) {
         return toResponse(findContract(id));
     }
 
-    // ── Kontratat e klientit ──────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeaseContractSummary> getByClient(Long clientId, Pageable pageable) {
-        // CLIENT mund të shohë vetëm kontratat e tij
-        String role = TenantContext.getRole();
-        if ("CLIENT".equalsIgnoreCase(role)) {
+        if ("CLIENT".equalsIgnoreCase(TenantContext.getRole()))
             clientId = TenantContext.getUserId();
-        }
         return contractRepo.findByClientIdOrderByCreatedAtDesc(clientId, pageable)
                 .map(this::toSummary);
     }
 
-    // ── Kontratat e agjentit ──────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeaseContractSummary> getByAgent(Long agentId, Pageable pageable) {
         assertIsAdminOrAgent();
@@ -63,7 +60,6 @@ public class LeaseContractService {
                 .map(this::toSummary);
     }
 
-    // ── Kontratat sipas pronës ────────────────────────────────────
     @Transactional(readOnly = true)
     public List<LeaseContractSummary> getByProperty(Long propertyId) {
         assertIsAdminOrAgent();
@@ -71,7 +67,6 @@ public class LeaseContractService {
                 .stream().map(this::toSummary).toList();
     }
 
-    // ── Kontratat që skadojnë brenda 30 ditëve ───────────────────
     @Transactional(readOnly = true)
     public List<LeaseContractSummary> getExpiringSoon() {
         assertIsAdminOrAgent();
@@ -81,22 +76,15 @@ public class LeaseContractService {
                 .stream().map(this::toSummary).toList();
     }
 
-    // ── Krijo kontratë ───────────────────────────────────────────
+    // ── Krijo ────────────────────────────────────────────────────
     @Transactional
     public LeaseContractResponse create(LeaseContractCreateRequest req) {
         assertIsAdminOrAgent();
+        validateCreate(req);
 
-        // Valido datat
-        if (!req.endDate().isAfter(req.startDate())) {
-            throw new ConflictException("end_date duhet të jetë pas start_date");
-        }
-
-        // Kontrollo nëse prona ka tashmë kontratë aktive
         contractRepo.findByProperty_IdAndStatus(req.propertyId(), LeaseStatus.ACTIVE)
-                .ifPresent(c -> {
-                    throw new ConflictException(
-                            "Prona ka tashmë kontratë aktive me id: " + c.getId());
-                });
+                .ifPresent(c -> { throw new ConflictException(
+                        "Prona ka tashmë kontratë aktive me id: " + c.getId()); });
 
         Property property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -118,55 +106,110 @@ public class LeaseContractService {
                 .endDate(req.endDate())
                 .rent(req.rent())
                 .deposit(req.deposit())
-                .currency(req.currency() != null ? req.currency() : "EUR")
+                .currency(req.currency() != null ? req.currency().toUpperCase() : "EUR")
                 .contractFileUrl(req.contractFileUrl())
                 .status(LeaseStatus.PENDING_SIGNATURE)
                 .build();
 
         LeaseContract saved = contractRepo.save(contract);
-        log.info("LeaseContract u krijua: id={}, property={}, client={}",
+        log.info("LeaseContract created: id={}, property={}, client={}",
                 saved.getId(), req.propertyId(), req.clientId());
         return toResponse(saved);
     }
 
-    // ── Ndrysho kontratën ────────────────────────────────────────
+    // ── Update ───────────────────────────────────────────────────
     @Transactional
     public LeaseContractResponse update(Long id, LeaseContractUpdateRequest req) {
         assertIsAdminOrAgent();
         LeaseContract contract = findContract(id);
+        validateUpdate(req, contract);
 
-        if (contract.getStatus() == LeaseStatus.ENDED ||
-                contract.getStatus() == LeaseStatus.CANCELLED) {
+        if (contract.getStatus() == LeaseStatus.ENDED
+                || contract.getStatus() == LeaseStatus.CANCELLED)
             throw new ConflictException("Kontratat e mbyllura nuk mund të ndryshohen");
-        }
 
         if (req.startDate()       != null) contract.setStartDate(req.startDate());
         if (req.endDate()         != null) contract.setEndDate(req.endDate());
         if (req.rent()            != null) contract.setRent(req.rent());
         if (req.deposit()         != null) contract.setDeposit(req.deposit());
-        if (req.currency()        != null) contract.setCurrency(req.currency());
+        if (req.currency()        != null) contract.setCurrency(req.currency().toUpperCase());
         if (req.contractFileUrl() != null) contract.setContractFileUrl(req.contractFileUrl());
 
         return toResponse(contractRepo.save(contract));
     }
 
-    // ── Ndrysho statusin ─────────────────────────────────────────
+    // ── Status ───────────────────────────────────────────────────
     @Transactional
     public LeaseContractResponse updateStatus(Long id, LeaseStatusRequest req) {
         assertIsAdminOrAgent();
-        findContract(id); // verifiko ekzistencën
+        findContract(id);
         contractRepo.updateStatus(id, req.status());
-        log.info("LeaseContract id={} statusi u ndryshua në {}", id, req.status());
+        log.info("LeaseContract id={} status → {}", id, req.status());
         return toResponse(findContract(id));
     }
 
-    // ── Statistika ────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public long countActive() {
         return contractRepo.countByStatus(LeaseStatus.ACTIVE);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // VALIDATION
+    // ════════════════════════════════════════════════════════════
+
+    private void validateCreate(LeaseContractCreateRequest req) {
+        if (req.propertyId() == null || req.propertyId() <= 0)
+            throw new IllegalArgumentException("propertyId i detyrueshëm");
+
+        if (req.clientId() == null || req.clientId() <= 0)
+            throw new IllegalArgumentException("clientId i detyrueshëm");
+
+        if (req.startDate() == null)
+            throw new IllegalArgumentException("startDate i detyrueshëm");
+
+        if (req.endDate() == null)
+            throw new IllegalArgumentException("endDate i detyrueshëm");
+
+        if (!req.endDate().isAfter(req.startDate()))
+            throw new IllegalArgumentException("endDate duhet të jetë pas startDate");
+
+        if (req.startDate().isBefore(LocalDate.now().minusDays(1)))
+            throw new IllegalArgumentException("startDate nuk mund të jetë në të shkuarën");
+
+        if (req.rent() != null && req.rent().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Rent >= 0");
+
+        if (req.deposit() != null && req.deposit().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Deposit >= 0");
+
+        if (req.currency() != null && !VALID_CURRENCIES.contains(req.currency().toUpperCase()))
+            throw new IllegalArgumentException("Currency e pavlefshme: " + req.currency());
+
+        if (req.contractFileUrl() != null && req.contractFileUrl().length() > 500)
+            throw new IllegalArgumentException("contractFileUrl max 500 karaktere");
+    }
+
+    private void validateUpdate(LeaseContractUpdateRequest req, LeaseContract existing) {
+        // Valido datat nëse ndryshojnë
+        LocalDate start = req.startDate() != null ? req.startDate() : existing.getStartDate();
+        LocalDate end   = req.endDate()   != null ? req.endDate()   : existing.getEndDate();
+        if (start != null && end != null && !end.isAfter(start))
+            throw new IllegalArgumentException("endDate duhet të jetë pas startDate");
+
+        if (req.rent() != null && req.rent().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Rent >= 0");
+
+        if (req.deposit() != null && req.deposit().compareTo(BigDecimal.ZERO) < 0)
+            throw new IllegalArgumentException("Deposit >= 0");
+
+        if (req.currency() != null && !VALID_CURRENCIES.contains(req.currency().toUpperCase()))
+            throw new IllegalArgumentException("Currency e pavlefshme: " + req.currency());
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // HELPERS & MAPPERS
+    // ════════════════════════════════════════════════════════════
+
     private LeaseContract findContract(Long id) {
         return contractRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -174,17 +217,15 @@ public class LeaseContractService {
     }
 
     private void assertIsAdminOrAgent() {
-        if (!TenantContext.hasRole("ADMIN", "AGENT")) {
+        if (!TenantContext.hasRole("ADMIN", "AGENT"))
             throw new ForbiddenException("Vetëm ADMIN ose AGENT mund të kryejë këtë veprim");
-        }
     }
 
-    // ── Mappers ───────────────────────────────────────────────────
     private LeaseContractResponse toResponse(LeaseContract c) {
         return new LeaseContractResponse(
                 c.getId(),
-                c.getProperty()  != null ? c.getProperty().getId() : null,
-                c.getListing()   != null ? c.getListing().getId()  : null,
+                c.getProperty() != null ? c.getProperty().getId() : null,
+                c.getListing()  != null ? c.getListing().getId()  : null,
                 c.getClientId(), c.getAgentId(),
                 c.getStartDate(), c.getEndDate(),
                 c.getRent(), c.getDeposit(), c.getCurrency(),
