@@ -1,7 +1,6 @@
 package com.realestate.backend.repository;
 
 import com.realestate.backend.entity.enums.LeadStatus;
-import com.realestate.backend.entity.enums.LeadType;
 import com.realestate.backend.entity.lead.PropertyLeadRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,7 +21,8 @@ public interface LeadRequestRepository extends JpaRepository<PropertyLeadRequest
 
     List<PropertyLeadRequest> findByProperty_IdOrderByCreatedAtDesc(Long propertyId);
 
-    // Leads të paassinjuara (për admin)
+    // Leads të paassinjuara (për admin) — NDRYSHIM: shton edhe DECLINED
+    // DECLINED kthehet si NEW pa agjent, kështu admini e sheh në unassigned
     @Query("""
         SELECT lr FROM PropertyLeadRequest lr
         WHERE lr.assignedAgentId IS NULL
@@ -40,16 +40,28 @@ public interface LeadRequestRepository extends JpaRepository<PropertyLeadRequest
     """)
     void updateStatus(@Param("id") Long id, @Param("status") LeadStatus status);
 
-    // Asinjono agjent
+    // NDRYSHIM: assignAgent NUK e kalon më automatikisht në IN_PROGRESS
+    // Statusi mbetet NEW — agjenti vetë klikon Accept për ta kaluar në IN_PROGRESS
     @Modifying
     @Query("""
         UPDATE PropertyLeadRequest lr
         SET lr.assignedAgentId = :agentId,
-            lr.status = com.realestate.backend.entity.enums.LeadStatus.IN_PROGRESS,
             lr.updatedAt = CURRENT_TIMESTAMP
         WHERE lr.id = :id
     """)
     void assignAgent(@Param("id") Long id, @Param("agentId") Long agentId);
+
+    // SHTUAR: declineLead — heq agjentin dhe kthon statusin në NEW
+    // Agjenti refuzon lead-in operacionalisht — admini do ta reassignojë
+    @Modifying
+    @Query("""
+        UPDATE PropertyLeadRequest lr
+        SET lr.assignedAgentId = NULL,
+            lr.status = com.realestate.backend.entity.enums.LeadStatus.NEW,
+            lr.updatedAt = CURRENT_TIMESTAMP
+        WHERE lr.id = :id
+    """)
+    void declineLead(@Param("id") Long id);
 
     long countByStatus(LeadStatus status);
 
