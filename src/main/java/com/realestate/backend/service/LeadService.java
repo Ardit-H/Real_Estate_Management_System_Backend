@@ -10,6 +10,7 @@ import com.realestate.backend.exception.*;
 import com.realestate.backend.multitenancy.TenantContext;
 import com.realestate.backend.repository.LeadRequestRepository;
 import com.realestate.backend.repository.PropertyRepository;
+import com.realestate.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
@@ -27,6 +28,7 @@ public class LeadService {
 
     private final LeadRequestRepository leadRepo;
     private final PropertyRepository    propertyRepo;
+    private final UserRepository userRepository;
 
     // ── Të gjitha leads (ADMIN/AGENT) — pa ndryshim ──────────────────────────
     @Transactional(readOnly = true)
@@ -261,9 +263,31 @@ public class LeadService {
     // ── Mapper — pa ndryshim ──────────────────────────────────────────────────
 
     private LeadResponse toResponse(PropertyLeadRequest l) {
+        // Merr emrin e klientit
+        String clientName = null;
+        if (l.getClientId() != null) {
+            clientName = userRepository.findFullNameById(l.getClientId())
+                    .orElse("Client #" + l.getClientId());
+        }
+
+        // Merr emrin e agjentit
+        String agentName = null;
+        if (l.getAssignedAgentId() != null) {
+            agentName = userRepository.findFullNameById(l.getAssignedAgentId())
+                    .orElse("Agent #" + l.getAssignedAgentId());
+        }
+
+        // Merr titullin e pronës
+        String propertyTitle = null;
+        if (l.getProperty() != null) {
+            propertyTitle = l.getProperty().getTitle();
+        }
+
         return new LeadResponse(
-                l.getId(), l.getClientId(), l.getAssignedAgentId(),
-                l.getProperty() != null ? l.getProperty().getId() : null,
+                l.getId(),
+                l.getClientId(),    clientName,
+                l.getAssignedAgentId(), agentName,
+                l.getProperty() != null ? l.getProperty().getId() : null, propertyTitle,
                 l.getType(), l.getMessage(), l.getBudget(),
                 l.getPreferredDate(), l.getSource(), l.getStatus(),
                 l.getCreatedAt(), l.getUpdatedAt()
