@@ -4,5 +4,6 @@ public enum LeadStatus {
     NEW,
     IN_PROGRESS,
     DONE,
-    REJECTED
+    REJECTED,
+    DECLINED
 }

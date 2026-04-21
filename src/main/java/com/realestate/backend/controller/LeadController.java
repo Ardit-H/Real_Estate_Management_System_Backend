@@ -24,6 +24,8 @@ public class LeadController {
 
     private final LeadService leadService;
 
+    // ── pa ndryshim ───────────────────────────────────────────────────────────
+
     @GetMapping
     @Operation(summary = "Listo leads sipas statusit (ADMIN/AGENT)")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
@@ -69,7 +71,7 @@ public class LeadController {
     }
 
     @GetMapping("/unassigned")
-    @Operation(summary = "Leads të paasinjuara (ADMIN)")
+    @Operation(summary = "Leads të paasinjuara — NEW pa agjent (ADMIN)")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<LeadResponse>> getUnassigned() {
         return ResponseEntity.ok(leadService.getUnassigned());
@@ -92,7 +94,8 @@ public class LeadController {
     }
 
     @PatchMapping("/{id}/assign")
-    @Operation(summary = "Asinjono agjent (ADMIN)")
+    @Operation(summary = "Asinjono agjent — statusi MBETET NEW, agjenti pranon vetë (ADMIN)")
+    // NDRYSHIM dokumentimi: assignAgent tani nuk e kalon IN_PROGRESS automatikisht
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<LeadResponse> assign(
             @PathVariable Long id,
@@ -101,11 +104,27 @@ public class LeadController {
     }
 
     @PatchMapping("/{id}/status")
-    @Operation(summary = "Ndrysho statusin (ADMIN/AGENT)")
+    @Operation(summary = "Ndrysho statusin — NEW→IN_PROGRESS (Accept), IN_PROGRESS→DONE/REJECTED (ADMIN/AGENT)")
+    // NDRYSHIM: agjenti mund të ndryshojë vetëm leads të asignuara tek ai
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
     public ResponseEntity<LeadResponse> updateStatus(
             @PathVariable Long id,
             @Valid @RequestBody LeadStatusRequest request) {
         return ResponseEntity.ok(leadService.updateStatus(id, request));
+    }
+
+    // ── SHTUAR: endpoint i ri për Decline ─────────────────────────────────────
+    // Agjenti refuzon operacionalisht — lead kthehet tek admini si NEW pa agjent
+    // E ndryshme nga REJECTED (final biznesi) — DECLINE rifillon ciklin
+    @PatchMapping("/{id}/decline")
+    @Operation(
+            summary = "Agjenti refuzon lead-in (Decline) — kthehet tek admini si NEW pa agjent",
+            description = "Përdoret kur agjenti nuk mund ta trajtojë lead-in (është i zënë, nuk i përshtatet). " +
+                    "Lead kthehet si NEW pa agjent — admini e sheh në /unassigned dhe e assign tek tjetri. " +
+                    "E NDRYSHME nga REJECTED: REJECTED = vendim final biznesi, DECLINE = refuzim operacional."
+    )
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    public ResponseEntity<LeadResponse> declineLead(@PathVariable Long id) {
+        return ResponseEntity.ok(leadService.declineLead(id));
     }
 }
