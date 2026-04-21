@@ -46,4 +46,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
           AND u.deletedAt IS NULL
     """)
     List<User> findActiveByTenant(@Param("tenantId") Long tenantId);
+
+    // Shto këtë metodë — merr emrin e plotë sipas ID
+    // Përdoret nga LeadService për të marrë emrat e agjentit dhe klientit
+    @Query("SELECT u.firstName || ' ' || u.lastName FROM User u WHERE u.id = :id")
+    Optional<String> findFullNameById(@Param("id") Long id);
 }
