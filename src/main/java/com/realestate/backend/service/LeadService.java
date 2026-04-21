@@ -28,21 +28,21 @@ public class LeadService {
     private final LeadRequestRepository leadRepo;
     private final PropertyRepository    propertyRepo;
 
-    // Të gjitha leads (ADMIN/AGENT)
+    // ── Të gjitha leads (ADMIN/AGENT) — pa ndryshim ──────────────────────────
     @Transactional(readOnly = true)
     public Page<LeadResponse> getAll(Pageable pageable) {
         assertIsAdminOrAgent();
         return leadRepo.findByStatusOrderByCreatedAtDesc(LeadStatus.NEW, pageable).map(this::toResponse);
     }
 
-    // Leads sipas statusit
+    // ── Leads sipas statusit — pa ndryshim ───────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeadResponse> getByStatus(LeadStatus status, Pageable pageable) {
         assertIsAdminOrAgent();
         return leadRepo.findByStatusOrderByCreatedAtDesc(status, pageable).map(this::toResponse);
     }
 
-    // Leads të agjentit
+    // ── Leads të agjentit — pa ndryshim ──────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeadResponse> getMyLeadsAsAgent(Pageable pageable) {
         assertIsAdminOrAgent();
@@ -50,27 +50,28 @@ public class LeadService {
                 .map(this::toResponse);
     }
 
-    // Leads të klientit
+    // ── Leads të klientit — pa ndryshim ──────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeadResponse> getMyLeadsAsClient(Pageable pageable) {
         return leadRepo.findByClientIdOrderByCreatedAtDesc(TenantContext.getUserId(), pageable)
                 .map(this::toResponse);
     }
 
-    // Leads të paassinjuara (ADMIN)
+    // ── Leads të paassinjuara — pa ndryshim ──────────────────────────────────
+    // findUnassigned() kap edhe leads që u kthyen nga Decline (NEW + assignedAgentId = NULL)
     @Transactional(readOnly = true)
     public List<LeadResponse> getUnassigned() {
         assertIsAdmin();
         return leadRepo.findUnassigned().stream().map(this::toResponse).toList();
     }
 
-    // Merr sipas ID
+    // ── Merr sipas ID — pa ndryshim ──────────────────────────────────────────
     @Transactional(readOnly = true)
     public LeadResponse getById(Long id) {
         return toResponse(findLead(id));
     }
 
-    // Leads sipas pronës
+    // ── Leads sipas pronës — pa ndryshim ─────────────────────────────────────
     @Transactional(readOnly = true)
     public List<LeadResponse> getByProperty(Long propertyId) {
         assertIsAdminOrAgent();
@@ -78,11 +79,9 @@ public class LeadService {
                 .stream().map(this::toResponse).toList();
     }
 
-    // Krijo lead
+    // ── Krijo lead — pa ndryshim ──────────────────────────────────────────────
     @Transactional
     public LeadResponse create(LeadCreateRequest req) {
-
-        // Validime
         if (req.type() == null) {
             throw new BadRequestException("Tipi i kërkesës është i detyrueshëm. "
                     + "Vlerat e lejuara: SELL, BUY, RENT, VALUATION");
@@ -93,11 +92,8 @@ public class LeadService {
         if (req.preferredDate() != null && req.preferredDate().isBefore(LocalDate.now())) {
             throw new BadRequestException("Data e preferuar nuk mund të jetë në të kaluarën");
         }
-        // source ka default WEBSITE — nuk ka nevojë për validim shtesë
-        // sepse tipi LeadSource e garanton vlerën e vlefshme
 
         Long clientId = TenantContext.getUserId();
-
         Property property = null;
         if (req.propertyId() != null) {
             property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
@@ -105,10 +101,7 @@ public class LeadService {
                             "Prona nuk u gjet: " + req.propertyId()));
         }
 
-        // BUY/RENT pa pronë është OK (klient kërkon pronë)
-        // SELL/VALUATION pa pronë — paralajmërim në log (jo error)
-        if ((req.type() == LeadType.SELL || req.type() == LeadType.VALUATION)
-                && property == null) {
+        if ((req.type() == LeadType.SELL || req.type() == LeadType.VALUATION) && property == null) {
             log.warn("Lead tipi {} u krijua pa pronë — clientId={}", req.type(), clientId);
         }
 
@@ -128,55 +121,125 @@ public class LeadService {
         return toResponse(saved);
     }
 
-    // Asinjono agjent (ADMIN)
+    // ── NDRYSHIM: assignAgent ─────────────────────────────────────────────────
+    // Para: assignAgent() e kalonte direkt NEW → IN_PROGRESS automatikisht
+    // Tani: assignAgent() vendos vetëm agjentin, statusi MBETET NEW
+    //       Agjenti vetë klikon Accept → IN_PROGRESS
+    //       Kjo lejon reassignment nga DECLINED pa problem — lead është tashmë NEW
     @Transactional
     public LeadResponse assignAgent(Long id, LeadAssignRequest req) {
         assertIsAdmin();
 
         PropertyLeadRequest lead = findLead(id);
 
-        // Validime
+        // NDRYSHIM: DONE dhe REJECTED janë finale — nuk mund të risinohen
+        // DECLINED tashmë është NEW (e ktheu declineLead), kështu hyn normalisht
         if (lead.getStatus() == LeadStatus.DONE || lead.getStatus() == LeadStatus.REJECTED) {
             throw new InvalidStateException("Leadi me status '"
-                    + lead.getStatus() + "' nuk mund të asinohet");
+                    + lead.getStatus() + "' është final dhe nuk mund të asinohet");
         }
         if (req.agentId() == null) {
             throw new BadRequestException("agent_id është i detyrueshëm");
         }
 
+        // assignAgent() tani NUK e ndryshon statusin — shih repository
         leadRepo.assignAgent(id, req.agentId());
-        log.info("Lead id={} u asinjua tek agjenti id={}", id, req.agentId());
+        log.info("Lead id={} u asinjua tek agjenti id={} (statusi mbetet: {})",
+                id, req.agentId(), lead.getStatus());
         return toResponse(findLead(id));
     }
 
-    // Ndrysho statusin
+    // ── NDRYSHIM: updateStatus ────────────────────────────────────────────────
+    // Para: lejohej NEW → IN_PROGRESS nga çdo agjent
+    // Tani: kontrollon që agjenti mund të ndryshojë vetëm leads të asignuara tek ai
+    //       dhe shton validimin për DECLINED
     @Transactional
     public LeadResponse updateStatus(Long id, LeadStatusRequest req) {
         assertIsAdminOrAgent();
 
         PropertyLeadRequest lead = findLead(id);
 
-        // ── Validime — tranzicionet e lejuara ────────────────────────────────
-        // NEW        → IN_PROGRESS, REJECTED
-        // IN_PROGRESS → DONE, REJECTED
-        // DONE       → (final, nuk ndryshon)
-        // REJECTED   → (final, nuk ndryshon)
+        // DONE dhe REJECTED janë absolutisht finale — as admini nuk i ndryshon
         if (lead.getStatus() == LeadStatus.DONE || lead.getStatus() == LeadStatus.REJECTED) {
             throw new InvalidStateException("Leadi me status '"
                     + lead.getStatus() + "' është final dhe nuk mund të ndryshohet");
         }
-        if (req.status() == LeadStatus.NEW) {
-            throw new BadRequestException("Leadi nuk mund të kthehet në statusin NEW");
+
+        // DECLINED trajtohet vetëm nga /decline endpoint, jo nga /status
+        if (lead.getStatus() == LeadStatus.DECLINED) {
+            throw new InvalidStateException(
+                    "Leadi DECLINED nuk mund të ndryshohet nga agjenti. " +
+                            "Admini do ta reassignojë.");
         }
-        // Agjent nuk mund të vendosë REJECTED pa qenë ADMIN — opsionale
-        // (e lëmë në mënyrën aktuale — të dy rolet mund të refuzojnë)
+
+        // Nuk mund të kthehesh manualisht në NEW
+        if (req.status() == LeadStatus.NEW || req.status() == LeadStatus.DECLINED) {
+            throw new BadRequestException(
+                    "Statusi NEW dhe DECLINED nuk mund të vendosen manualisht");
+        }
+
+        // NDRYSHIM: agjenti mund të ndryshojë vetëm leads të asignuara tek ai
+        if (TenantContext.hasRole("AGENT")) {
+            if (!TenantContext.getUserId().equals(lead.getAssignedAgentId())) {
+                throw new ForbiddenException(
+                        "Mund të ndryshoni vetëm leads të asignuara tek ju");
+            }
+        }
+
+        // Validim tranzicionesh:
+        // NEW        → IN_PROGRESS (Accept nga agjenti)
+        // IN_PROGRESS → DONE ose REJECTED
+        if (lead.getStatus() == LeadStatus.NEW && req.status() == LeadStatus.REJECTED) {
+            // Agjenti nuk mund ta Reject-ojë pa e pranuar fillimisht
+            // Për refuzim pa pranim, duhet të përdorë butonin Decline
+            throw new BadRequestException(
+                    "Nuk mund ta refuzoni (REJECTED) pa e pranuar fillimisht. " +
+                            "Përdorni butonin Decline nëse nuk doni ta merrni këtë lead.");
+        }
+        if (lead.getStatus() == LeadStatus.IN_PROGRESS && req.status() == LeadStatus.NEW) {
+            throw new BadRequestException("Nuk mund të ktheheni në NEW pasi keni filluar punën");
+        }
 
         leadRepo.updateStatus(id, req.status());
-        log.info("Lead id={} statusi u ndryshua nga {} në {}", id, lead.getStatus(), req.status());
+        log.info("Lead id={} statusi u ndryshua nga {} në {}",
+                id, lead.getStatus(), req.status());
         return toResponse(findLead(id));
     }
 
-    // Helpers
+    // ── SHTUAR: declineLead ───────────────────────────────────────────────────
+    // Agjenti refuzon lead-in operacionalisht (është i zënë, nuk i përshtatet)
+    // Lead kthehet tek admini si NEW pa agjent — admini e assign tek tjetri
+    // E ndryshme nga REJECTED: REJECTED = vendim final biznesi, DECLINE = refuzim operacional
+    @Transactional
+    public LeadResponse declineLead(Long id) {
+        assertIsAdminOrAgent();
+
+        PropertyLeadRequest lead = findLead(id);
+
+        // Vetëm agjenti i asignuar mund ta refuzojë
+        if (TenantContext.hasRole("AGENT")) {
+            if (!TenantContext.getUserId().equals(lead.getAssignedAgentId())) {
+                throw new ForbiddenException(
+                        "Mund të refuzoni vetëm leads të asignuara tek ju");
+            }
+        }
+
+        // Decline lejohet vetëm kur lead-i është NEW (pra nuk ka filluar punën)
+        // Nëse agjenti ka filluar (IN_PROGRESS), duhet të kontaktojë adminin
+        if (lead.getStatus() != LeadStatus.NEW) {
+            throw new InvalidStateException(
+                    "Decline lejohet vetëm për leads me status NEW. " +
+                            "Nëse keni filluar punën (IN_PROGRESS), kontaktoni adminin për reassignment.");
+        }
+
+        // declineLead(): vendos assignedAgentId = NULL dhe status = NEW
+        leadRepo.declineLead(id);
+        log.info("Lead id={} u refuzua (Decline) nga agjenti id={} — kthehet tek admini si NEW",
+                id, TenantContext.getUserId());
+        return toResponse(findLead(id));
+    }
+
+    // ── Helpers — pa ndryshim ─────────────────────────────────────────────────
 
     private PropertyLeadRequest findLead(Long id) {
         return leadRepo.findById(id)
@@ -195,7 +258,7 @@ public class LeadService {
         }
     }
 
-    // Mapper
+    // ── Mapper — pa ndryshim ──────────────────────────────────────────────────
 
     private LeadResponse toResponse(PropertyLeadRequest l) {
         return new LeadResponse(
