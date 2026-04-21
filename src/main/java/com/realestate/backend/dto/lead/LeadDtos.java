@@ -63,8 +63,11 @@ public class LeadDtos {
     public record LeadResponse(
             Long id,
             @JsonProperty("client_id")          Long clientId,
+            @JsonProperty("client_name")        String clientName,
             @JsonProperty("assigned_agent_id")   Long assignedAgentId,
+            @JsonProperty("agent_name")         String agentName,
             @JsonProperty("property_id")         Long propertyId,
+            @JsonProperty("property_title")     String propertyTitle,
             LeadType type,
             String message,
             BigDecimal budget,
