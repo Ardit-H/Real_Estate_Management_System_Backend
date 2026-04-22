@@ -4,5 +4,6 @@ public enum LeadType {
     SELL,
     BUY,
     RENT,
-    VALUATION
+    VALUATION,
+    RENT_SEEKING
 }
