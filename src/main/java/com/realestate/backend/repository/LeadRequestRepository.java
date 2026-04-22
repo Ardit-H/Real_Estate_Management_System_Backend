@@ -66,4 +66,13 @@ public interface LeadRequestRepository extends JpaRepository<PropertyLeadRequest
     long countByStatus(LeadStatus status);
 
     long countByAssignedAgentIdAndStatus(Long agentId, LeadStatus status);
+
+    @Modifying
+    @Query("""
+    UPDATE PropertyLeadRequest lr
+    SET lr.property.id = :propertyId,
+        lr.updatedAt = CURRENT_TIMESTAMP
+    WHERE lr.id = :id
+    """)
+    void updatePropertyId(@Param("id") Long id, @Param("propertyId") Long propertyId);
 }
