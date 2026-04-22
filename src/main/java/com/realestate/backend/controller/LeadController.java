@@ -14,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/leads")
@@ -126,5 +127,14 @@ public class LeadController {
     @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
     public ResponseEntity<LeadResponse> declineLead(@PathVariable Long id) {
         return ResponseEntity.ok(leadService.declineLead(id));
+    }
+
+    @PatchMapping("/{id}/property")
+    @Operation(summary = "Lidh lead-in me një pronë (ADMIN/AGENT)")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    public ResponseEntity<LeadResponse> linkProperty(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body) {
+        return ResponseEntity.ok(leadService.linkProperty(id, body.get("property_id")));
     }
 }

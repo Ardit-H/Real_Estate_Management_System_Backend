@@ -241,6 +241,15 @@ public class LeadService {
         return toResponse(findLead(id));
     }
 
+    @Transactional
+    public LeadResponse linkProperty(Long id, Long propertyId) {
+        assertIsAdminOrAgent();
+        PropertyLeadRequest lead = findLead(id);
+        leadRepo.updatePropertyId(id, propertyId);
+        log.info("Lead id={} u lidh me property id={}", id, propertyId);
+        return toResponse(findLead(id));
+    }
+
     // ── Helpers — pa ndryshim ─────────────────────────────────────────────────
 
     private PropertyLeadRequest findLead(Long id) {
