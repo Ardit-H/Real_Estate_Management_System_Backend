@@ -355,6 +355,13 @@ public class SaleService {
         return toPaymentResponse(paymentRepo.save(payment));
     }
 
+    @Transactional(readOnly = true)
+    public Page<SaleListingResponse> getMyListings(Pageable pageable) {
+        assertIsAdminOrAgent();
+        return listingRepo.findByAgentIdAndDeletedAtIsNull(TenantContext.getUserId(), pageable)
+                .map(this::toListingResponse);
+    }
+
     // Helpers
 
     private SaleListing findActiveListing(Long id) {

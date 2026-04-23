@@ -55,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/properties/**").hasAnyRole("ADMIN", "AGENT")
 
                         // ── USERS — profili personal (të gjithë rolet) ────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/users/agents/list").hasAnyRole("ADMIN","AGENT")
                         .requestMatchers(HttpMethod.GET,   "/api/users/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
                         .requestMatchers(HttpMethod.PUT,   "/api/users/me").hasAnyRole("ADMIN", "AGENT", "CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/api/users/me/password").hasAnyRole("ADMIN", "AGENT", "CLIENT")

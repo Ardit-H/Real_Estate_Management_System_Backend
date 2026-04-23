@@ -41,6 +41,16 @@ public class SaleController {
         return ResponseEntity.ok(saleService.getAllListings(PageRequest.of(page, size, sort)));
     }
 
+    @GetMapping("/listings/agent/me")
+    @Operation(summary = "Listings e agjentit tim")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    public ResponseEntity<Page<SaleListingResponse>> getMyListings(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(saleService.getMyListings(PageRequest.of(page, size)));
+    }
+
     @GetMapping("/listings/{id}")
     @Operation(summary = "Merr sale listing sipas ID")
     @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")

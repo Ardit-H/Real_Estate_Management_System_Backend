@@ -48,6 +48,12 @@ public class UserController {
     public ResponseEntity<UserResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getById(id));
     }
+    @GetMapping("/agents/list")
+    @Operation(summary = "Lista e agjentëve me emra (ADMIN/AGENT)")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
+    public ResponseEntity<List<UserResponse>> getAgentsList() {
+        return ResponseEntity.ok(userService.getAgentsInTenant()); // ← metodë e re
+    }
 
     @PutMapping("/me")
     @Operation(summary = "Ndrysho profilin tim (emri, email)")
