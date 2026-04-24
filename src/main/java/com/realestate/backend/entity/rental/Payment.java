@@ -1,5 +1,6 @@
 package com.realestate.backend.entity.rental;
 
+import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.PaymentStatus;
 import com.realestate.backend.entity.enums.PaymentType;
 import jakarta.persistence.*;
@@ -69,4 +70,9 @@ public class Payment {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recipient_id")
+    private User recipient;
 }
