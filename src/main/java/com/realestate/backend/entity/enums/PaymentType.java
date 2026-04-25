@@ -4,5 +4,7 @@ public enum PaymentType {
     RENT,
     DEPOSIT,
     LATE_FEE,
-    MAINTENANCE
+    MAINTENANCE,
+    AGENT_COMMISSION,
+    CLIENT_BONUS
 }
