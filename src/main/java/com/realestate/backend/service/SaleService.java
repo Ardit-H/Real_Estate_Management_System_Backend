@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.sale.SaleDtos.*;
+import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.SaleStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleContract;
@@ -29,11 +30,12 @@ public class SaleService {
     private final SaleContractRepository contractRepo;
     private final SalePaymentRepository  paymentRepo;
     private final PropertyRepository     propertyRepo;
+    private final UserRepository         userRepo;
 
     // Vlerat e lejuara (reflektojnë CHECK constraints në DB)
     private static final Set<String> VALID_CURRENCIES     = Set.of("EUR", "USD", "ALL", "GBP", "CHF");
     private static final Set<String> VALID_CONTRACT_STATUS = Set.of("PENDING", "COMPLETED", "CANCELLED");
-    private static final Set<String> VALID_PAYMENT_TYPES  = Set.of("DEPOSIT", "INSTALLMENT", "FULL", "COMMISSION");
+    private static final Set<String> VALID_PAYMENT_TYPES  = Set.of("DEPOSIT", "INSTALLMENT", "FULL", "COMMISSION", "AGENT_COMMISSION", "CLIENT_BONUS");
     private static final Set<String> VALID_PAYMENT_STATUS = Set.of("PENDING", "PAID", "FAILED", "REFUNDED");
     private static final Set<String> VALID_PAYMENT_METHODS =
             Set.of("BANK_TRANSFER", "CASH", "CARD", "CHECK", "ONLINE");
@@ -257,6 +259,10 @@ public class SaleService {
         }
 
         contractRepo.updateStatus(id, req.status());
+        if ("COMPLETED".equals(req.status())) {
+            SaleContract fresh = findContract(id);
+            createCommissionPayments(fresh);
+        }
         log.info("SaleContract id={} statusi u ndryshua në {}", id, req.status());
         return toContractResponse(findContract(id));
     }
@@ -308,20 +314,71 @@ public class SaleService {
         if ("CANCELLED".equals(contract.getStatus())) {
             throw new InvalidStateException("Nuk mund të krijohet pagesë për kontratë të CANCELLED");
         }
-
+        User recipient = null;
+        if (req.recipientId() != null) {
+            recipient = userRepo.findById(req.recipientId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "User nuk u gjet: " + req.recipientId()));
+        }
         SalePayment payment = SalePayment.builder()
                 .contract(contract)
                 .amount(req.amount())
                 .currency(req.currency() != null ? req.currency().toUpperCase() : "EUR")
                 .paymentType(req.paymentType() != null ? req.paymentType().toUpperCase() : "FULL")
                 .paymentMethod(req.paymentMethod() != null ? req.paymentMethod().toUpperCase() : null)
+                .recipient(recipient)
                 .status("PENDING")
                 .build();
 
         SalePayment saved = paymentRepo.save(payment);
-        log.info("SalePayment u krijua: id={}, contract={}, amount={}",
-                saved.getId(), req.contractId(), req.amount());
+        log.info("SalePayment u krijua: id={}, contract={}, amount={},recipient={}",
+                saved.getId(), req.contractId(), req.amount(),
+                recipient != null ? recipient.getId() : "COMPANY");
         return toPaymentResponse(saved);
+    }
+
+    private void createCommissionPayments(SaleContract contract) {
+        BigDecimal commissionRate  = new BigDecimal("0.03");
+        BigDecimal commissionTotal = contract.getSalePrice().multiply(commissionRate);
+
+        // 1. Kompania — recipient NULL
+        paymentRepo.save(SalePayment.builder()
+                .contract(contract)
+                .amount(commissionTotal.multiply(new BigDecimal("0.50")))
+                .currency(contract.getCurrency())
+                .paymentType("COMMISSION")
+                .recipient(null)
+                .status("PENDING")
+                .build());
+
+        // 2. Agjenti — 40%
+        userRepo.findById(contract.getAgentId()).ifPresent(agent -> {
+            paymentRepo.save(SalePayment.builder()
+                    .contract(contract)
+                    .amount(commissionTotal.multiply(new BigDecimal("0.40")))
+                    .currency(contract.getCurrency())
+                    .paymentType("AGENT_COMMISSION")
+                    .recipient(agent)
+                    .status("PENDING")
+                    .build());
+        });
+
+        // 3. Blerësi — 10%
+        if (contract.getBuyerId() != null) {
+            userRepo.findById(contract.getBuyerId()).ifPresent(buyer -> {
+                paymentRepo.save(SalePayment.builder()
+                        .contract(contract)
+                        .amount(commissionTotal.multiply(new BigDecimal("0.10")))
+                        .currency(contract.getCurrency())
+                        .paymentType("CLIENT_BONUS")
+                        .recipient(buyer)
+                        .status("PENDING")
+                        .build());
+            });
+        }
+
+        log.info("Commission payments u krijuan për contract={}, total={}",
+                contract.getId(), commissionTotal);
     }
 
     @Transactional
@@ -413,11 +470,22 @@ public class SaleService {
     }
 
     private SalePaymentResponse toPaymentResponse(SalePayment p) {
+        Long   recipientId   = null;
+        String recipientName = null;
+        String recipientType = "COMPANY"; // default kur NULL
+
+        if (p.getRecipient() != null) {
+            recipientId   = p.getRecipient().getId();
+            recipientName = p.getRecipient().getFullName();
+            recipientType = p.getRecipient().getRole().name(); // AGENT / CLIENT
+        }
+
         return new SalePaymentResponse(
                 p.getId(),
                 p.getContract() != null ? p.getContract().getId() : null,
                 p.getAmount(), p.getCurrency(), p.getPaymentType(),
                 p.getPaidDate(), p.getPaymentMethod(), p.getTransactionRef(),
+                recipientId, recipientName, recipientType,  // ← TRE fusha të reja
                 p.getStatus(), p.getCreatedAt()
         );
     }

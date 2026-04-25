@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.rental.PaymentDtos.*;
+import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.PaymentStatus;
 import com.realestate.backend.entity.enums.PaymentType;
 import com.realestate.backend.entity.rental.LeaseContract;
@@ -11,6 +12,7 @@ import com.realestate.backend.exception.ResourceNotFoundException;
 import com.realestate.backend.multitenancy.TenantContext;
 import com.realestate.backend.repository.LeaseContractRepository;
 import com.realestate.backend.repository.PaymentRepository;
+import com.realestate.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
@@ -28,6 +30,7 @@ public class PaymentService {
 
     private final PaymentRepository       paymentRepo;
     private final LeaseContractRepository contractRepo;
+    private final UserRepository userRepo;
 
     private static final List<String> VALID_CURRENCIES = List.of("EUR","USD","GBP","CHF","ALL","MKD");
     private static final List<String> VALID_PAY_TYPES  = List.of("RENT","DEPOSIT","LATE_FEE","MAINTENANCE");
@@ -71,6 +74,14 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Kontrata nuk u gjet: " + req.contractId()));
 
+        User recipient = null;
+        if (req.recipientId() != null) {
+            recipient = userRepo.findById(req.recipientId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "User nuk u gjet: " + req.recipientId()));
+        }
+
+
         Payment payment = Payment.builder()
                 .contract(contract)
                 .amount(req.amount())
@@ -78,6 +89,7 @@ public class PaymentService {
                 .paymentType(req.paymentType())
                 .dueDate(req.dueDate())
                 .paymentMethod(req.paymentMethod())
+                .recipient(recipient)
                 .notes(req.notes())
                 .status(PaymentStatus.PENDING)
                 .build();
@@ -195,12 +207,23 @@ public class PaymentService {
     }
 
     private PaymentResponse toResponse(Payment p) {
+        Long   recipientId   = null;
+        String recipientName = null;
+        String recipientType = "COMPANY";
+
+        if (p.getRecipient() != null) {
+            recipientId   = p.getRecipient().getId();
+            recipientName = p.getRecipient().getFullName();
+            recipientType = p.getRecipient().getRole().name();
+        }
+
         return new PaymentResponse(
                 p.getId(),
                 p.getContract() != null ? p.getContract().getId() : null,
                 p.getAmount(), p.getCurrency(),
                 p.getPaymentType(), p.getDueDate(), p.getPaidDate(),
                 p.getPaymentMethod(), p.getTransactionRef(),
+                recipientId, recipientName, recipientType,
                 p.getStatus(), p.getNotes(), p.getCreatedAt()
         );
     }
