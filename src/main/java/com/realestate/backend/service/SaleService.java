@@ -7,6 +7,7 @@ import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleContract;
 import com.realestate.backend.entity.sale.SaleListing;
 import com.realestate.backend.entity.sale.SalePayment;
+import com.realestate.backend.entity.lead.PropertyLeadRequest;
 import com.realestate.backend.exception.*;
 import com.realestate.backend.multitenancy.TenantContext;
 import com.realestate.backend.repository.*;
@@ -31,6 +32,7 @@ public class SaleService {
     private final SalePaymentRepository  paymentRepo;
     private final PropertyRepository     propertyRepo;
     private final UserRepository         userRepo;
+    private final LeadRequestRepository leadRequestRepo;
 
     // Vlerat e lejuara (reflektojnë CHECK constraints në DB)
     private static final Set<String> VALID_CURRENCIES     = Set.of("EUR", "USD", "ALL", "GBP", "CHF");
@@ -363,18 +365,38 @@ public class SaleService {
                     .build());
         });
 
-        // 3. Blerësi — 10%
-        if (contract.getBuyerId() != null) {
-            userRepo.findById(contract.getBuyerId()).ifPresent(buyer -> {
-                paymentRepo.save(SalePayment.builder()
-                        .contract(contract)
-                        .amount(commissionTotal.multiply(new BigDecimal("0.10")))
-                        .currency(contract.getCurrency())
-                        .paymentType("CLIENT_BONUS")
-                        .recipient(buyer)
-                        .status("PENDING")
-                        .build());
-            });
+        // 3. CLIENT_BONUS — 10%
+        //    Kërko lead-in për këtë pronë — pa asnjë kolonë të re
+        Long leadClientId = leadRequestRepo
+                .findByPropertyIdOrdered(contract.getProperty().getId())
+                .stream()
+                .findFirst()                        // lead-i më i fundit/relevant
+                .map(PropertyLeadRequest::getClientId)
+                .orElse(null);
+
+        if (leadClientId != null) {
+            userRepo.findById(leadClientId).ifPresent(leadClient ->
+                    paymentRepo.save(SalePayment.builder()
+                            .contract(contract)
+                            .amount(commissionTotal.multiply(new BigDecimal("0.10")))
+                            .currency(contract.getCurrency())
+                            .paymentType("CLIENT_BONUS")
+                            .recipient(leadClient)      // ← lead creator, JO blerësi
+                            .status("PENDING")
+                            .build())
+            );
+            log.info("CLIENT_BONUS → lead clientId={}", leadClientId);
+        } else {
+            // Nuk ka lead — 10% i shkon kompanisë
+            paymentRepo.save(SalePayment.builder()
+                    .contract(contract)
+                    .amount(commissionTotal.multiply(new BigDecimal("0.10")))
+                    .currency(contract.getCurrency())
+                    .paymentType("COMMISSION")
+                    .recipient(null)
+                    .status("PENDING")
+                    .build());
+            log.info("Nuk ka lead — 10% i shkon kompanisë");
         }
 
         log.info("Commission payments u krijuan për contract={}, total={}",
