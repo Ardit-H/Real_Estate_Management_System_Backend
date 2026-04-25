@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/sales/applications")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 @Tag(name = "Sales — Applications")
 @SecurityRequirement(name = "BearerAuth")
 public class SaleApplicationController {

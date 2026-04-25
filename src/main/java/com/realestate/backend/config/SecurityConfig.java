@@ -83,7 +83,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH,"/api/leads/**").hasAnyRole("ADMIN", "AGENT")
 
                         // ── SALES ─────────────────────────────────────────────────────
-                        .requestMatchers(HttpMethod.GET, "/api/sales/listings/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+
+                        // ── SALES ─────────────────────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET,   "/api/sales/listings/**").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.POST,  "/api/sales/applications").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.GET,   "/api/sales/applications/my").hasAnyRole("ADMIN", "AGENT", "CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/api/sales/applications/*/cancel").hasAnyRole("ADMIN", "AGENT", "CLIENT")
                         .requestMatchers("/api/sales/**").hasAnyRole("ADMIN", "AGENT")
 
                         // ── CONTRACTS + PAYMENTS ──────────────────────────────────────
