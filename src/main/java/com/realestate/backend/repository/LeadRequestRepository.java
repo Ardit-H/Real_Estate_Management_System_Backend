@@ -74,5 +74,13 @@ public interface LeadRequestRepository extends JpaRepository<PropertyLeadRequest
         lr.updatedAt = CURRENT_TIMESTAMP
     WHERE lr.id = :id
     """)
+
     void updatePropertyId(@Param("id") Long id, @Param("propertyId") Long propertyId);
+    @Query("""
+        SELECT plr FROM PropertyLeadRequest plr
+        WHERE plr.property.id = :propertyId
+          AND plr.status IN ('DONE', 'IN_PROGRESS')
+        ORDER BY plr.createdAt DESC
+    """)
+    List<PropertyLeadRequest> findByPropertyIdOrdered(@Param("propertyId") Long propertyId);
 }
