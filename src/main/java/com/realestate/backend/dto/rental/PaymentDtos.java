@@ -36,6 +36,8 @@ public class PaymentDtos {
 
             @JsonProperty("payment_method")
             String paymentMethod,
+            @JsonProperty("recipient_id")
+            Long recipientId,
 
             String notes
     ) {}
@@ -74,6 +76,9 @@ public class PaymentDtos {
             @JsonProperty("paid_date")       LocalDate paidDate,
             @JsonProperty("payment_method")  String paymentMethod,
             @JsonProperty("transaction_ref") String transactionRef,
+            @JsonProperty("recipient_id")     Long recipientId,
+            @JsonProperty("recipient_name")   String recipientName,
+            @JsonProperty("recipient_type")   String recipientType,
             PaymentStatus status,
             String notes,
             @JsonProperty("created_at")      LocalDateTime createdAt
