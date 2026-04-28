@@ -39,10 +39,6 @@ public class PaymentDtos {
             @JsonProperty("recipient_id")
             Long recipientId,
 
-            // recipient_id — opcionale, nëse null → kompania
-            @JsonProperty("recipient_id")
-            Long recipientId,
-
             String notes
     ) {}
 
