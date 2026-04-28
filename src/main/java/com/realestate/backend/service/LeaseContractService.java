@@ -175,13 +175,8 @@ public class LeaseContractService {
         return contractRepo.countByStatus(LeaseStatus.ACTIVE);
     }
 
-    // ════════════════════════════════════════════════════════════
-    // KOMISIONI — identik me Sales, aktivizohet kur ACTIVE
-    // Baza: 1 muaj qira × 3% = komisioni total
-    // ════════════════════════════════════════════════════════════
 
     private void createRentalCommissionPayments(LeaseContract contract) {
-        // Nëse rent është null ose zero, mos krijo komisione
         if (contract.getRent() == null
                 || contract.getRent().compareTo(BigDecimal.ZERO) == 0) {
             log.warn("LeaseContract id={} ka rent=0, komisioni nuk u krijua", contract.getId());
@@ -193,8 +188,27 @@ public class LeaseContractService {
         BigDecimal ownerAmount     = rent.multiply(new BigDecimal("0.97"));
         String     currency        = contract.getCurrency();
 
+
+        BigDecimal alreadyPaid = paymentRepo
+                .findByContract_IdOrderByDueDateAsc(contract.getId())
+                .stream()
+                .filter(p -> p.getStatus() == PaymentStatus.PAID
+                        && p.getPaymentType() == PaymentType.DEPOSIT)
+                .map(Payment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // ownerAmount i mbetur = 97% - çfarë është paguar tashmë si DEPOSIT
+        BigDecimal remainingOwnerAmount = ownerAmount.subtract(alreadyPaid);
+
+        // Sigurohu që nuk shkojmë negativ
+        if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) < 0) {
+            remainingOwnerAmount = BigDecimal.ZERO;
+        }
+
+        log.info("LeaseContract={} rent={} alreadyPaid={} remainingOwner={}",
+                contract.getId(), rent, alreadyPaid, remainingOwnerAmount);
+
         // Kontrollo nëse prona erdhi nga lead me status DONE
-        // (pronari është klienti që solli pronën — njësoj si Sales)
         Long ownerClientId = leadRequestRepo
                 .findByPropertyIdOrdered(contract.getProperty().getId())
                 .stream()
@@ -206,72 +220,72 @@ public class LeaseContractService {
         boolean isClientOwnedProperty = ownerClientId != null;
 
         if (isClientOwnedProperty) {
-            // ══════════════════════════════════════════════════
-            // SKENARI 1 — Pronë e klientit (erdhi nga lead DONE)
-            // ══════════════════════════════════════════════════
-            log.info("Rental komisioni — Skenari 1: pronë e klientit id={}, contract={}",
+            log.info("Rental Skenari 1 — pronë e klientit id={}, contract={}",
                     ownerClientId, contract.getId());
 
             User owner = userRepo.findById(ownerClientId)
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Pronari nuk u gjet: " + ownerClientId));
 
-            // 1. RENT (97%) → pronari
-            savePayment(contract, ownerAmount, currency, PaymentType.RENT, owner);
+            // RENT — vetëm shuma e mbetur pas deposit-eve
+            if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) > 0) {
+                savePayment(contract, remainingOwnerAmount, currency, PaymentType.RENT, owner);
+            }
 
-            // 2. COMMISSION (50% e komisionit) → kompania (recipient=null)
+            // COMMISSION — 50% → kompania
             savePayment(contract,
                     commissionTotal.multiply(new BigDecimal("0.50")),
                     currency, PaymentType.COMMISSION, null);
 
-            // 3. AGENT_COMMISSION (40% e komisionit) → agjenti
+            // AGENT_COMMISSION — 40% → agjenti
             userRepo.findById(contract.getAgentId()).ifPresent(agent ->
                     savePayment(contract,
                             commissionTotal.multiply(new BigDecimal("0.40")),
                             currency, PaymentType.AGENT_COMMISSION, agent)
             );
 
-            // 4. CLIENT_BONUS (10% e komisionit) → pronari
+            // CLIENT_BONUS — 10% → pronari
             savePayment(contract,
                     commissionTotal.multiply(new BigDecimal("0.10")),
                     currency, PaymentType.CLIENT_BONUS, owner);
 
-            log.info("Skenari 1 rental payments: RENT={} COMMISSION={} AGENT={} BONUS={}",
-                    ownerAmount,
+            log.info("Skenari 1 payments: RENT={} COMMISSION={} AGENT={} BONUS={} (alreadyPaid={})",
+                    remainingOwnerAmount,
                     commissionTotal.multiply(new BigDecimal("0.50")),
                     commissionTotal.multiply(new BigDecimal("0.40")),
-                    commissionTotal.multiply(new BigDecimal("0.10")));
+                    commissionTotal.multiply(new BigDecimal("0.10")),
+                    alreadyPaid);
 
         } else {
             // ══════════════════════════════════════════════════
-            // SKENARI 2 — Pronë e kompanisë (pa lead DONE)
-            // ══════════════════════════════════════════════════
-            log.info("Rental komisioni — Skenari 2: pronë e kompanisë, contract={}",
-                    contract.getId());
 
-            // 1. RENT (97%) → kompania (prona është e kompanisë)
-            savePayment(contract, ownerAmount, currency, PaymentType.RENT, null);
+            log.info("Rental Skenari 2 — pronë e kompanisë, contract={}", contract.getId());
 
-            // 2. COMMISSION (60% e komisionit) → kompania
+            // RENT — vetëm shuma e mbetur pas deposit-eve → kompania
+            if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) > 0) {
+                savePayment(contract, remainingOwnerAmount, currency, PaymentType.RENT, null);
+            }
+
+            // COMMISSION — 60% → kompania
             savePayment(contract,
                     commissionTotal.multiply(new BigDecimal("0.60")),
                     currency, PaymentType.COMMISSION, null);
 
-            // 3. AGENT_COMMISSION (40% e komisionit) → agjenti
+            // AGENT_COMMISSION — 40% → agjenti
             userRepo.findById(contract.getAgentId()).ifPresent(agent ->
                     savePayment(contract,
                             commissionTotal.multiply(new BigDecimal("0.40")),
                             currency, PaymentType.AGENT_COMMISSION, agent)
             );
 
-            log.info("Skenari 2 rental payments: RENT={} COMMISSION={} AGENT={}",
-                    ownerAmount,
+            log.info("Skenari 2 payments: RENT={} COMMISSION={} AGENT={} (alreadyPaid={})",
+                    remainingOwnerAmount,
                     commissionTotal.multiply(new BigDecimal("0.60")),
-                    commissionTotal.multiply(new BigDecimal("0.40")));
+                    commissionTotal.multiply(new BigDecimal("0.40")),
+                    alreadyPaid);
         }
     }
 
-    // Helper i brendshëm — krijo dhe ruaj Payment
     private void savePayment(LeaseContract contract, BigDecimal amount,
                              String currency, PaymentType type, User recipient) {
         Payment payment = Payment.builder()
