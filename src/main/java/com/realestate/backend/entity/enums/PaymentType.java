@@ -6,5 +6,6 @@ public enum PaymentType {
     LATE_FEE,
     MAINTENANCE,
     AGENT_COMMISSION,
-    CLIENT_BONUS
+    CLIENT_BONUS,
+    COMMISSION
 }
