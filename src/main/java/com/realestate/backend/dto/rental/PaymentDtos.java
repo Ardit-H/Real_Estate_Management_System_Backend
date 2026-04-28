@@ -26,7 +26,7 @@ public class PaymentDtos {
 
             @Size(max = 10) String currency,
 
-            @Schema(allowableValues = {"RENT","DEPOSIT","LATE_FEE","MAINTENANCE"})
+            @Schema(allowableValues = {"RENT","DEPOSIT","LATE_FEE","MAINTENANCE","AGENT_COMMISSION","CLIENT_BONUS"})
             @JsonProperty("payment_type")
             PaymentType paymentType,
 
@@ -36,6 +36,10 @@ public class PaymentDtos {
 
             @JsonProperty("payment_method")
             String paymentMethod,
+
+            // recipient_id — opcionale, nëse null → kompania
+            @JsonProperty("recipient_id")
+            Long recipientId,
 
             String notes
     ) {}
@@ -66,17 +70,22 @@ public class PaymentDtos {
 
     public record PaymentResponse(
             Long id,
-            @JsonProperty("contract_id")     Long contractId,
+            @JsonProperty("contract_id")      Long contractId,
             BigDecimal amount,
             String currency,
-            @JsonProperty("payment_type")    PaymentType paymentType,
-            @JsonProperty("due_date")        LocalDate dueDate,
-            @JsonProperty("paid_date")       LocalDate paidDate,
-            @JsonProperty("payment_method")  String paymentMethod,
-            @JsonProperty("transaction_ref") String transactionRef,
+            @JsonProperty("payment_type")     PaymentType paymentType,
+            @JsonProperty("due_date")         LocalDate dueDate,
+            @JsonProperty("paid_date")        LocalDate paidDate,
+            @JsonProperty("payment_method")   String paymentMethod,
+            @JsonProperty("transaction_ref")  String transactionRef,
+            // ── Recipient — identik me SalePaymentResponse ──
+            @JsonProperty("recipient_id")     Long recipientId,
+            @JsonProperty("recipient_name")   String recipientName,
+            @JsonProperty("recipient_type")   String recipientType,
+            // ────────────────────────────────────────────────
             PaymentStatus status,
             String notes,
-            @JsonProperty("created_at")      LocalDateTime createdAt
+            @JsonProperty("created_at")       LocalDateTime createdAt
     ) {}
 
     // ── SUMMARY (stats dashboard) ─────────────────────────────
