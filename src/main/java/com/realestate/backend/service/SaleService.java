@@ -1,11 +1,13 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.sale.SaleDtos.*;
+import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.SaleStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleContract;
 import com.realestate.backend.entity.sale.SaleListing;
 import com.realestate.backend.entity.sale.SalePayment;
+import com.realestate.backend.entity.lead.PropertyLeadRequest;
 import com.realestate.backend.exception.*;
 import com.realestate.backend.multitenancy.TenantContext;
 import com.realestate.backend.repository.*;
@@ -29,11 +31,13 @@ public class SaleService {
     private final SaleContractRepository contractRepo;
     private final SalePaymentRepository  paymentRepo;
     private final PropertyRepository     propertyRepo;
+    private final UserRepository         userRepo;
+    private final LeadRequestRepository leadRequestRepo;
 
     // Vlerat e lejuara (reflektojnë CHECK constraints në DB)
     private static final Set<String> VALID_CURRENCIES     = Set.of("EUR", "USD", "ALL", "GBP", "CHF");
     private static final Set<String> VALID_CONTRACT_STATUS = Set.of("PENDING", "COMPLETED", "CANCELLED");
-    private static final Set<String> VALID_PAYMENT_TYPES  = Set.of("DEPOSIT", "INSTALLMENT", "FULL", "COMMISSION");
+    private static final Set<String> VALID_PAYMENT_TYPES  = Set.of("DEPOSIT", "INSTALLMENT", "FULL", "COMMISSION", "AGENT_COMMISSION", "CLIENT_BONUS");
     private static final Set<String> VALID_PAYMENT_STATUS = Set.of("PENDING", "PAID", "FAILED", "REFUNDED");
     private static final Set<String> VALID_PAYMENT_METHODS =
             Set.of("BANK_TRANSFER", "CASH", "CARD", "CHECK", "ONLINE");
@@ -257,6 +261,10 @@ public class SaleService {
         }
 
         contractRepo.updateStatus(id, req.status());
+        if ("COMPLETED".equals(req.status())) {
+            SaleContract fresh = findContract(id);
+            createCommissionPayments(fresh);
+        }
         log.info("SaleContract id={} statusi u ndryshua në {}", id, req.status());
         return toContractResponse(findContract(id));
     }
@@ -304,24 +312,190 @@ public class SaleService {
 
         SaleContract contract = findContract(req.contractId());
 
-        // Nuk mund të shtohen pagesa në kontratë të anuluar/kompletuar
-        if ("CANCELLED".equals(contract.getStatus())) {
-            throw new InvalidStateException("Nuk mund të krijohet pagesë për kontratë të CANCELLED");
+        // Nuk mund të shtohen pagesa manuale në kontratë COMPLETED
+        if ("CANCELLED".equals(contract.getStatus())
+                || "COMPLETED".equals(contract.getStatus())) {
+            throw new InvalidStateException(
+                    "Nuk mund të krijohet pagesë manuale për kontratë "
+                            + contract.getStatus());
         }
 
+        Set<String> AUTO_ONLY_TYPES = Set.of("FULL", "COMMISSION",
+                "AGENT_COMMISSION", "CLIENT_BONUS");
+        if (req.paymentType() != null
+                && AUTO_ONLY_TYPES.contains(req.paymentType().toUpperCase())) {
+            throw new BadRequestException(
+                    "Tipi '" + req.paymentType() + "' krijohet vetëm automatikisht. " +
+                            "Pagesat manuale lejojnë vetëm: DEPOSIT, INSTALLMENT");
+        }
+
+        User recipient = null;
+        if (req.recipientId() != null) {
+            recipient = userRepo.findById(req.recipientId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "User nuk u gjet: " + req.recipientId()));
+        }
         SalePayment payment = SalePayment.builder()
                 .contract(contract)
                 .amount(req.amount())
                 .currency(req.currency() != null ? req.currency().toUpperCase() : "EUR")
                 .paymentType(req.paymentType() != null ? req.paymentType().toUpperCase() : "FULL")
                 .paymentMethod(req.paymentMethod() != null ? req.paymentMethod().toUpperCase() : null)
+                .recipient(recipient)
                 .status("PENDING")
                 .build();
 
         SalePayment saved = paymentRepo.save(payment);
-        log.info("SalePayment u krijua: id={}, contract={}, amount={}",
-                saved.getId(), req.contractId(), req.amount());
+        log.info("SalePayment u krijua: id={}, contract={}, amount={},recipient={}",
+                saved.getId(), req.contractId(), req.amount(),
+                recipient != null ? recipient.getId() : "COMPANY");
         return toPaymentResponse(saved);
+    }
+
+    private void createCommissionPayments(SaleContract contract) {
+        BigDecimal salePrice       = contract.getSalePrice();
+        BigDecimal commissionRate  = new BigDecimal("0.03");
+        BigDecimal commissionTotal = salePrice.multiply(commissionRate);
+        BigDecimal ownerAmount     = salePrice.multiply(new BigDecimal("0.97"));
+        String     currency        = contract.getCurrency();
+
+        // ← E RE: llogarit shumën e depozitave dhe kësteve të paguara tashmë
+        BigDecimal alreadyPaid = paymentRepo
+                .findByContract_IdOrderByCreatedAtAsc(contract.getId())
+                .stream()
+                .filter(p -> p.getStatus().equals("PAID")
+                        && (p.getPaymentType().equals("DEPOSIT")
+                        || p.getPaymentType().equals("INSTALLMENT")))
+                .map(SalePayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // ownerAmount i mbetur = 97% - çfarë është paguar tashmë
+        BigDecimal remainingOwnerAmount = ownerAmount.subtract(alreadyPaid);
+
+        // Sigurohu që nuk shkojmë negativ
+        if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) < 0) {
+            remainingOwnerAmount = BigDecimal.ZERO;
+        }
+
+        log.info("Contract={} alreadyPaid={} remainingOwner={}",
+                contract.getId(), alreadyPaid, remainingOwnerAmount);
+
+        Long ownerClientId = leadRequestRepo
+                .findByPropertyIdOrdered(contract.getProperty().getId())
+                .stream()
+                .filter(l -> l.getStatus().name().equals("DONE"))
+                .findFirst()
+                .map(PropertyLeadRequest::getClientId)
+                .orElse(null);
+
+        boolean isClientOwnedProperty = ownerClientId != null;
+
+        if (isClientOwnedProperty) {
+            // ══════════════════════════════════════════════════
+            // SKENARI 1 — Pronë e klientit
+            // ══════════════════════════════════════════════════
+            User owner = userRepo.findById(ownerClientId)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Pronari nuk u gjet: " + ownerClientId));
+
+            // FULL — vetëm shuma e mbetur pas depozitave
+            // Nëse alreadyPaid = 0 → FULL = 97% e plotë
+            // Nëse alreadyPaid = 10,000 → FULL = 97,000 - 10,000 = 87,000
+            if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) > 0) {
+                paymentRepo.save(SalePayment.builder()
+                        .contract(contract)
+                        .amount(remainingOwnerAmount)
+                        .currency(currency)
+                        .paymentType("FULL")
+                        .recipient(owner)
+                        .status("PENDING")
+                        .build());
+            }
+
+            // COMMISSION — 50% → kompania (nuk ndikohet nga depozita)
+            paymentRepo.save(SalePayment.builder()
+                    .contract(contract)
+                    .amount(commissionTotal.multiply(new BigDecimal("0.50")))
+                    .currency(currency)
+                    .paymentType("COMMISSION")
+                    .recipient(null)
+                    .status("PENDING")
+                    .build());
+
+            // AGENT_COMMISSION — 40% → agjenti
+            userRepo.findById(contract.getAgentId()).ifPresent(agent ->
+                    paymentRepo.save(SalePayment.builder()
+                            .contract(contract)
+                            .amount(commissionTotal.multiply(new BigDecimal("0.40")))
+                            .currency(currency)
+                            .paymentType("AGENT_COMMISSION")
+                            .recipient(agent)
+                            .status("PENDING")
+                            .build())
+            );
+
+            // CLIENT_BONUS — 10% → pronari
+            paymentRepo.save(SalePayment.builder()
+                    .contract(contract)
+                    .amount(commissionTotal.multiply(new BigDecimal("0.10")))
+                    .currency(currency)
+                    .paymentType("CLIENT_BONUS")
+                    .recipient(owner)
+                    .status("PENDING")
+                    .build());
+
+            log.info("Skenari 1: FULL={} COMMISSION={} AGENT={} BONUS={} (alreadyPaid={})",
+                    remainingOwnerAmount,
+                    commissionTotal.multiply(new BigDecimal("0.50")),
+                    commissionTotal.multiply(new BigDecimal("0.40")),
+                    commissionTotal.multiply(new BigDecimal("0.10")),
+                    alreadyPaid);
+
+        } else {
+            // ══════════════════════════════════════════════════
+            // SKENARI 2 — Pronë e kompanisë
+            // ══════════════════════════════════════════════════
+
+            // FULL — vetëm shuma e mbetur
+            if (remainingOwnerAmount.compareTo(BigDecimal.ZERO) > 0) {
+                paymentRepo.save(SalePayment.builder()
+                        .contract(contract)
+                        .amount(remainingOwnerAmount)
+                        .currency(currency)
+                        .paymentType("FULL")
+                        .recipient(null)
+                        .status("PENDING")
+                        .build());
+            }
+
+            // COMMISSION — 60% → kompania
+            paymentRepo.save(SalePayment.builder()
+                    .contract(contract)
+                    .amount(commissionTotal.multiply(new BigDecimal("0.60")))
+                    .currency(currency)
+                    .paymentType("COMMISSION")
+                    .recipient(null)
+                    .status("PENDING")
+                    .build());
+
+            // AGENT_COMMISSION — 40% → agjenti
+            userRepo.findById(contract.getAgentId()).ifPresent(agent ->
+                    paymentRepo.save(SalePayment.builder()
+                            .contract(contract)
+                            .amount(commissionTotal.multiply(new BigDecimal("0.40")))
+                            .currency(currency)
+                            .paymentType("AGENT_COMMISSION")
+                            .recipient(agent)
+                            .status("PENDING")
+                            .build())
+            );
+
+            log.info("Skenari 2: FULL={} COMMISSION={} AGENT={} (alreadyPaid={})",
+                    remainingOwnerAmount,
+                    commissionTotal.multiply(new BigDecimal("0.60")),
+                    commissionTotal.multiply(new BigDecimal("0.40")),
+                    alreadyPaid);
+        }
     }
 
     @Transactional
@@ -413,11 +587,22 @@ public class SaleService {
     }
 
     private SalePaymentResponse toPaymentResponse(SalePayment p) {
+        Long   recipientId   = null;
+        String recipientName = null;
+        String recipientType = "COMPANY"; // default kur NULL
+
+        if (p.getRecipient() != null) {
+            recipientId   = p.getRecipient().getId();
+            recipientName = p.getRecipient().getFullName();
+            recipientType = p.getRecipient().getRole().name(); // AGENT / CLIENT
+        }
+
         return new SalePaymentResponse(
                 p.getId(),
                 p.getContract() != null ? p.getContract().getId() : null,
                 p.getAmount(), p.getCurrency(), p.getPaymentType(),
                 p.getPaidDate(), p.getPaymentMethod(), p.getTransactionRef(),
+                recipientId, recipientName, recipientType,  // ← TRE fusha të reja
                 p.getStatus(), p.getCreatedAt()
         );
     }

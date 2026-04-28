@@ -103,7 +103,7 @@ public class LeadService {
                             "Prona nuk u gjet: " + req.propertyId()));
         }
 
-        if ((req.type() == LeadType.SELL || req.type() == LeadType.VALUATION  || req.type() == LeadType.RENT_SEEKING) && property == null) {
+        if ((req.type() == LeadType.SELL || req.type() == LeadType.VALUATION) && property == null) {
             log.warn("Lead tipi {} u krijua pa pronë — clientId={}", req.type(), clientId);
         }
 

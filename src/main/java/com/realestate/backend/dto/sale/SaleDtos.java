@@ -133,7 +133,9 @@ public class SaleDtos {
             String paymentType,
 
             @JsonProperty("payment_method")
-            String paymentMethod
+            String paymentMethod,
+            @JsonProperty("recipient_id")
+            Long recipientId
     ) {}
 
     public record SalePaymentMarkPaidRequest(
@@ -151,6 +153,9 @@ public class SaleDtos {
             @JsonProperty("paid_date")       LocalDate paidDate,
             @JsonProperty("payment_method")  String paymentMethod,
             @JsonProperty("transaction_ref") String transactionRef,
+            @JsonProperty("recipient_id")     Long recipientId,
+            @JsonProperty("recipient_name")   String recipientName,
+            @JsonProperty("recipient_type")   String recipientType,
             String status,
             @JsonProperty("created_at")      LocalDateTime createdAt
     ) {}
