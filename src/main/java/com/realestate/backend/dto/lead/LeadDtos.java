@@ -21,7 +21,7 @@ public class LeadDtos {
             Long propertyId,
 
             @NotNull(message = "Tipi i kërkesës është i detyrueshëm")
-            @Schema(allowableValues = {"SELL","BUY","RENT","VALUATION"})
+            @Schema(allowableValues = {"SELL","RENT","VALUATION"})
             LeadType type,
 
             String message,
