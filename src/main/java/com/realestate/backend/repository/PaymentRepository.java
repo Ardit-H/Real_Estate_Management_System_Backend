@@ -15,24 +15,54 @@ import java.util.List;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
-    // Pagesat sipas kontratës
-    List<Payment> findByContract_IdOrderByDueDateAsc(Long contractId);
-
-    // Pagesat sipas statusit
-    Page<Payment> findByStatusOrderByDueDateAsc(PaymentStatus status, Pageable pageable);
-
-    // Pagesat e vonuara (PENDING me due_date të kaluar)
+    // Pagesat sipas kontratës — LEFT JOIN FETCH recipient
+    // pa fetch, Hibernate lazy-load e kthen null kur sesioni mbyllet
     @Query("""
         SELECT p FROM Payment p
+        LEFT JOIN FETCH p.recipient
+        WHERE p.contract.id = :contractId
+        ORDER BY p.dueDate ASC
+    """)
+    List<Payment> findByContract_IdOrderByDueDateAsc(@Param("contractId") Long contractId);
+
+    // Pagesat sipas statusit — LEFT JOIN FETCH recipient
+    // Page<> nuk lejon JOIN FETCH direkt — duhet countQuery i veçantë
+    @Query(
+            value = """
+            SELECT p FROM Payment p
+            LEFT JOIN FETCH p.recipient
+            WHERE p.status = :status
+            ORDER BY p.dueDate ASC
+        """,
+            countQuery = """
+            SELECT COUNT(p) FROM Payment p
+            WHERE p.status = :status
+        """
+    )
+    Page<Payment> findByStatusOrderByDueDateAsc(
+            @Param("status") PaymentStatus status, Pageable pageable);
+
+    // Pagesat e vonuara — LEFT JOIN FETCH recipient
+    @Query("""
+        SELECT p FROM Payment p
+        LEFT JOIN FETCH p.recipient
         WHERE p.status = com.realestate.backend.entity.enums.PaymentStatus.PENDING
           AND p.dueDate < :today
         ORDER BY p.dueDate ASC
     """)
     List<Payment> findOverduePayments(@Param("today") LocalDate today);
 
-    // Pagesat e kontratës sipas statusit
+    // Pagesat e kontratës sipas statusit — LEFT JOIN FETCH recipient
+    @Query("""
+        SELECT p FROM Payment p
+        LEFT JOIN FETCH p.recipient
+        WHERE p.contract.id = :contractId
+          AND p.status = :status
+        ORDER BY p.dueDate ASC
+    """)
     List<Payment> findByContract_IdAndStatusOrderByDueDateAsc(
-            Long contractId, PaymentStatus status);
+            @Param("contractId") Long contractId,
+            @Param("status") PaymentStatus status);
 
     // Totali i të ardhurave të paguara
     @Query("""
@@ -51,9 +81,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     """)
     BigDecimal totalPaidByContract(@Param("contractId") Long contractId);
 
-    // Pagesat e muajit aktual
+    // Pagesat e muajit aktual — LEFT JOIN FETCH recipient
     @Query("""
         SELECT p FROM Payment p
+        LEFT JOIN FETCH p.recipient
         WHERE p.dueDate BETWEEN :from AND :to
         ORDER BY p.dueDate ASC
     """)
