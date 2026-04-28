@@ -20,7 +20,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     long countByUserIdAndIsReadFalse(Long userId);
 
-    // Shëno të gjitha si të lexuara
     @Modifying
     @Transactional
     @Query("""
@@ -30,7 +29,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     """)
     int markAllReadForUser(@Param("userId") Long userId);
 
-    // Shëno një si të lexuar
     @Modifying
     @Transactional
     @Query("""
@@ -40,7 +38,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     """)
     int markOneRead(@Param("id") Long id, @Param("userId") Long userId);
 
-    // Fshij notifikimet e vjetra (cleanup)
     @Modifying
     @Transactional
     @Query("""
