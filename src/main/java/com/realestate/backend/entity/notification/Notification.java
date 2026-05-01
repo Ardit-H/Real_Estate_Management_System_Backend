@@ -50,7 +50,7 @@ public class Notification {
     @Column(name = "action_url", length = 500)
     private String actionUrl;
 
-    @Column(name = "is_read")
+    @Column(name = "is_read", columnDefinition = "BOOLEAN")
     @Builder.Default
     private Boolean isRead = false;
 

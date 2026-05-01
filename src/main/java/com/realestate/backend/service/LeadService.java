@@ -4,6 +4,7 @@ import com.realestate.backend.dto.lead.LeadDtos.*;
 import com.realestate.backend.entity.enums.LeadSource;
 import com.realestate.backend.entity.enums.LeadStatus;
 import com.realestate.backend.entity.enums.LeadType;
+import com.realestate.backend.entity.enums.NotificationType;
 import com.realestate.backend.entity.lead.PropertyLeadRequest;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.exception.*;
@@ -29,6 +30,7 @@ public class LeadService {
     private final LeadRequestRepository leadRepo;
     private final PropertyRepository    propertyRepo;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     // ── Të gjitha leads (ADMIN/AGENT) — pa ndryshim ──────────────────────────
     @Transactional(readOnly = true)
@@ -144,8 +146,15 @@ public class LeadService {
             throw new BadRequestException("agent_id është i detyrueshëm");
         }
 
-        // assignAgent() tani NUK e ndryshon statusin — shih repository
         leadRepo.assignAgent(id, req.agentId());
+        notificationService.sendNotification(
+                req.agentId(),
+                "New Lead Assigned",
+                "You have a new " + lead.getType() + " lead assigned. Review and accept.",
+                NotificationType.REMINDER,
+                "lead", id,
+                "/agent/leads"
+        );
         log.info("Lead id={} u asinjua tek agjenti id={} (statusi mbetet: {})",
                 id, req.agentId(), lead.getStatus());
         return toResponse(findLead(id));
@@ -205,6 +214,26 @@ public class LeadService {
         leadRepo.updateStatus(id, req.status());
         log.info("Lead id={} statusi u ndryshua nga {} në {}",
                 id, lead.getStatus(), req.status());
+        if (req.status() == LeadStatus.IN_PROGRESS) {
+            notificationService.sendNotification(
+                    lead.getClientId(),
+                    "Lead Accepted",
+                    "An agent has accepted your request and will contact you soon.",
+                    NotificationType.SUCCESS,
+                    "lead", id,
+                    "/client/leads"
+            );
+        }
+        if (req.status() == LeadStatus.DONE) {
+            notificationService.sendNotification(
+                    lead.getClientId(),
+                    "Lead Completed ✓",
+                    "Your request has been completed successfully.",
+                    NotificationType.SUCCESS,
+                    "lead", id,
+                    "/client/leads"
+            );
+        }
         return toResponse(findLead(id));
     }
 

@@ -1,0 +1,1 @@
+ALTER TABLE notifications ALTER COLUMN is_read TYPE BOOLEAN USING is_read::boolean;

@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.rental.RentalDtos.*;
+import com.realestate.backend.entity.enums.NotificationType;
 import com.realestate.backend.entity.enums.RentalApplicationStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.rental.RentalApplication;
@@ -29,6 +30,7 @@ public class RentalService {
     private final RentalListingRepository     listingRepo;
     private final RentalApplicationRepository applicationRepo;
     private final PropertyRepository          propertyRepo;
+    private final NotificationService notificationService;
 
     private static final List<String> VALID_PRICE_PERIODS = List.of("DAILY","WEEKLY","MONTHLY","YEARLY");
     private static final List<String> VALID_CURRENCIES    = List.of("EUR","USD","GBP","CHF","ALL","MKD");
@@ -151,6 +153,16 @@ public class RentalService {
                 .build();
 
         RentalApplication saved = applicationRepo.save(application);
+        if (listing.getAgentId() != null) {
+            notificationService.sendNotification(
+                    listing.getAgentId(),
+                    "New Rental Application",
+                    "New application received for listing #" + req.listingId(),
+                    NotificationType.INFO,
+                    "rental_application", saved.getId(),
+                    "/agent/applications"
+            );
+        }
         log.info("RentalApplication created: id={}, listing={}, client={}",
                 saved.getId(), req.listingId(), clientId);
         return toApplicationResponse(saved);
@@ -168,6 +180,26 @@ public class RentalService {
 
         applicationRepo.reviewApplication(id, req.status(),
                 TenantContext.getUserId(), req.rejectionReason());
+        RentalApplication reviewed = applicationRepo.findById(id).orElseThrow();
+        if (req.status() == RentalApplicationStatus.APPROVED) {
+            notificationService.sendNotification(
+                    reviewed.getClientId(),
+                    "Application Approved ✓",
+                    "Your rental application #" + id + " has been approved!",
+                    NotificationType.SUCCESS,
+                    "rental_application", id,
+                    "/client/myapplications"
+            );
+        } else if (req.status() == RentalApplicationStatus.REJECTED) {
+            notificationService.sendNotification(
+                    reviewed.getClientId(),
+                    "Application Not Approved",
+                    "Your rental application #" + id + " was not approved.",
+                    NotificationType.WARNING,
+                    "rental_application", id,
+                    "/client/myapplications"
+            );
+        }
 
         return toApplicationResponse(applicationRepo.findById(id).orElseThrow());
     }

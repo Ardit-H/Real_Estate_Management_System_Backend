@@ -2,6 +2,7 @@ package com.realestate.backend.service;
 
 import com.realestate.backend.dto.sale.SaleDtos.*;
 import com.realestate.backend.entity.User;
+import com.realestate.backend.entity.enums.NotificationType;
 import com.realestate.backend.entity.enums.SaleStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleContract;
@@ -33,6 +34,7 @@ public class SaleService {
     private final PropertyRepository     propertyRepo;
     private final UserRepository         userRepo;
     private final LeadRequestRepository leadRequestRepo;
+    private final NotificationService notificationService;
 
     // Vlerat e lejuara (reflektojnë CHECK constraints në DB)
     private static final Set<String> VALID_CURRENCIES     = Set.of("EUR", "USD", "ALL", "GBP", "CHF");
@@ -204,6 +206,14 @@ public class SaleService {
                 .build();
 
         SaleContract saved = contractRepo.save(contract);
+        notificationService.sendNotification(
+                req.buyerId(),
+                "Sale Contract Created",
+                "A sale contract has been created for property #" + req.propertyId() + ". Please review.",
+                NotificationType.INFO,
+                "sale_contract", saved.getId(),
+                "/client/mycontracts"
+        );
         log.info("SaleContract u krijua: id={}, property={}, buyer={}",
                 saved.getId(), req.propertyId(), req.buyerId());
         return toContractResponse(saved);
@@ -264,6 +274,22 @@ public class SaleService {
         if ("COMPLETED".equals(req.status())) {
             SaleContract fresh = findContract(id);
             createCommissionPayments(fresh);
+            notificationService.sendNotification(
+                    fresh.getBuyerId(),
+                    "Sale Completed ✓",
+                    "Congratulations! Your purchase of property #" + fresh.getProperty().getId() + " is complete.",
+                    NotificationType.SUCCESS,
+                    "sale_contract", id,
+                    "/client/mycontracts"
+            );
+            notificationService.sendNotification(
+                    fresh.getAgentId(),
+                    "Sale Contract Completed",
+                    "Sale contract #" + id + " has been completed. Commission payments created.",
+                    NotificationType.SUCCESS,
+                    "sale_contract", id,
+                    "/agent/sales"
+            );
         }
         log.info("SaleContract id={} statusi u ndryshua në {}", id, req.status());
         return toContractResponse(findContract(id));
