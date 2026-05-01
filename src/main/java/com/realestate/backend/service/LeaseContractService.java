@@ -3,6 +3,7 @@ package com.realestate.backend.service;
 import com.realestate.backend.dto.rental.LeaseContractDtos.*;
 import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.LeaseStatus;
+import com.realestate.backend.entity.enums.NotificationType;
 import com.realestate.backend.entity.enums.PaymentStatus;
 import com.realestate.backend.entity.enums.PaymentType;
 import com.realestate.backend.entity.lead.PropertyLeadRequest;
@@ -41,6 +42,7 @@ public class LeaseContractService {
     private final PaymentRepository       paymentRepo;
     private final UserRepository          userRepo;
     private final LeadRequestRepository   leadRequestRepo;
+    private final NotificationService notificationService;
 
     private static final List<String> VALID_CURRENCIES = List.of("EUR","USD","GBP","CHF","ALL","MKD");
 
@@ -126,6 +128,14 @@ public class LeaseContractService {
                 .build();
 
         LeaseContract saved = contractRepo.save(contract);
+        notificationService.sendNotification(
+                req.clientId(),
+                "New Lease Contract",
+                "A lease contract has been created for you. Please review and sign.",
+                NotificationType.INFO,
+                "lease_contract", saved.getId(),
+                "/client/mycontracts"
+        );
         log.info("LeaseContract created: id={}, property={}, client={}",
                 saved.getId(), req.propertyId(), req.clientId());
         return toResponse(saved);
@@ -164,6 +174,22 @@ public class LeaseContractService {
                 && contract.getStatus() == LeaseStatus.PENDING_SIGNATURE) {
             LeaseContract fresh = findContract(id);
             createRentalCommissionPayments(fresh);
+            notificationService.sendNotification(
+                    fresh.getClientId(),
+                    "Lease Contract Activated ✓",
+                    "Your lease contract #" + fresh.getId() + " is now active.",
+                    NotificationType.SUCCESS,
+                    "lease_contract", fresh.getId(),
+                    "/client/mycontracts"
+            );
+            notificationService.sendNotification(
+                    fresh.getAgentId(),
+                    "Lease Contract Activated",
+                    "Contract #" + fresh.getId() + " is now active. Commission payments created.",
+                    NotificationType.SUCCESS,
+                    "lease_contract", fresh.getId(),
+                    "/agent/contracts"
+            );
         }
 
         log.info("LeaseContract id={} status → {}", id, req.status());
