@@ -3,6 +3,7 @@ package com.realestate.backend.service;
 import com.realestate.backend.dto.maintenance.MaintenanceDtos.*;
 import com.realestate.backend.entity.enums.MaintenancePriority;
 import com.realestate.backend.entity.enums.MaintenanceStatus;
+import com.realestate.backend.entity.enums.NotificationType;
 import com.realestate.backend.entity.maintenance.MaintenanceRequest;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.rental.LeaseContract;
@@ -29,6 +30,7 @@ public class MaintenanceService {
     private final MaintenanceRequestRepository maintenanceRepo;
     private final PropertyRepository           propertyRepo;
     private final LeaseContractRepository      leaseRepo;
+    private final NotificationService notificationService;
 
     // ── Listim sipas statusit ─────────────────────────────────
     @Transactional(readOnly = true)
@@ -98,6 +100,16 @@ public class MaintenanceService {
                 .build();
 
         MaintenanceRequest saved = maintenanceRepo.save(request);
+        if (property.getAgentId() != null) {
+            notificationService.sendNotification(
+                    property.getAgentId(),
+                    "New Maintenance Request",
+                    saved.getPriority() + " priority: " + saved.getTitle(),
+                    NotificationType.WARNING,
+                    "maintenance_request", saved.getId(),
+                    "/agent/maintenance"
+            );
+        }
         log.info("MaintenanceRequest u krijua: id={}, property={}, priority={}",
                 saved.getId(), req.propertyId(), saved.getPriority());
         return toResponse(saved);
@@ -130,21 +142,41 @@ public class MaintenanceService {
 
         if (req.status() == MaintenanceStatus.COMPLETED) {
             mr.setCompletedAt(LocalDateTime.now());
+            if (mr.getRequestedBy() != null) {
+                notificationService.sendNotification(
+                        mr.getRequestedBy(),
+                        "Maintenance Completed ✓",
+                        "Your request \"" + mr.getTitle() + "\" has been completed.",
+                        NotificationType.SUCCESS,
+                        "maintenance_request", id,
+                        "/client/maintenance"
+                );
+            }
         }
 
         log.info("MaintenanceRequest id={} statusi u ndryshua në {}", id, req.status());
         return toResponse(maintenanceRepo.save(mr));
     }
 
-    // ── Asinjono ──────────────────────────────────────────────
+
     @Transactional
     public MaintenanceResponse assign(Long id, MaintenanceAssignRequest req) {
         assertIsAdminOrAgent();
         MaintenanceRequest mr = findRequest(id);
         mr.setAssignedTo(req.assignedTo());
         mr.setStatus(MaintenanceStatus.IN_PROGRESS);
+        MaintenanceRequest result = maintenanceRepo.save(mr);
+        notificationService.sendNotification(
+                req.assignedTo(),
+                "Maintenance Request Assigned",
+                "You have been assigned: \"" + mr.getTitle() + "\"",
+                NotificationType.REMINDER,
+                "maintenance_request", id,
+                "/agent/maintenance"
+        );
         log.info("MaintenanceRequest id={} u asinjua tek userId={}", id, req.assignedTo());
-        return toResponse(maintenanceRepo.save(mr));
+        return toResponse(result);
+
     }
 
     // ── Helpers ───────────────────────────────────────────────
