@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 public class AiController {
 
     private final AiService aiService;
-    @Value("${gemini.api.key:placeholder}")
+    @Value("${groq.api.key:placeholder}")
     private String apiKey;
     // ── 1. Property Description Generator ────────────────────────
     @PostMapping("/property/description")
