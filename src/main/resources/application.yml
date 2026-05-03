@@ -121,3 +121,7 @@ logging:
     com.realestate: DEBUG
     org.springframework.security: INFO
     org.hibernate.SQL: INFO
+
+groq:
+  api:
+    key: ${GROQ_API_KEY:placeholder}
