@@ -33,44 +33,56 @@ Schema provisioning runs via Flyway when a new tenant registers. Migrations in `
 
 ```mermaid
 flowchart TD
-    A1["🏢 Anvogue\nslug: anvogue · id: 1"]
-    A2["🏢 EliteRealty\nslug: eliterealty · id: 2"]
-    A3["🏢 HomePro\nslug: homepro · id: 3"]
 
-    REQ["HTTP Request\nGET /api/properties · Authorization: Bearer eyJhbGci..."]
+    classDef default fill:#1F2937,stroke:#9CA3AF,color:#F9FAFB,stroke-width:1.5px;
+    classDef highlight fill:#14532D,stroke:#4ADE80,color:#FFFFFF,stroke-width:2px;
+    classDef warning fill:#78350F,stroke:#FBBF24,color:#FFFFFF,stroke-width:2px;
 
-    JWT["JWT Token — all routing info packed inside\nuserId · tenantId · schemaName · role"]
+    A1["🏢 Anvogue<br/>slug: anvogue · id: 1"]
+    A2["🏢 EliteRealty<br/>slug: eliterealty · id: 2"]
+    A3["🏢 HomePro<br/>slug: homepro · id: 3"]
+
+    REQ["HTTP Request<br/>GET /api/properties · Authorization: Bearer eyJhbGci..."]
+
+    JWT["JWT Token — all routing info packed inside<br/>userId · tenantId · schemaName · role"]
 
     subgraph FILTERS["Spring Security Filter Chain"]
-        F1["JwtAuthFilter\n1. validate token\n2. extract claims\n3. set TenantContext\n4. set Authentication"]
-        F2["PermissionAuthorizationFilter\n1. get userId from TenantContext\n2. JDBC → public.permissions\n3. AntPathMatcher check\n4. 403 or continue"]
+        F1["JwtAuthFilter<br/>1. validate token<br/>2. extract claims<br/>3. set TenantContext<br/>4. set Authentication"]
+
+        F2["PermissionAuthorizationFilter<br/>1. get userId from TenantContext<br/>2. JDBC → public.permissions<br/>3. AntPathMatcher check<br/>4. 403 or continue"]
     end
 
-    TC["TenantContext — ThreadLocal\nuserId · tenantId · schema=tenant_eliterealty_2 · role"]
+    TC["TenantContext — ThreadLocal<br/>userId · tenantId · schema=tenant_eliterealty_2 · role"]
 
-    HB["SchemaMultiTenantConnectionProvider\nSET search_path TO tenant_eliterealty_2, public"]
+    HB["SchemaMultiTenantConnectionProvider<br/>SET search_path TO tenant_eliterealty_2, public"]
 
     subgraph DB["PostgreSQL — realestate_db"]
-        PUB["public schema — shared\nusers · tenants · roles · permissions"]
-        S1["tenant_anvogue_1\nproperties · contracts · payments · leads"]
-        S2["tenant_eliterealty_2 ← ACTIVE\nproperties · contracts · payments · leads"]
-        S3["tenant_homepro_3\nproperties · contracts · payments · leads"]
+        PUB["public schema — shared<br/>users · tenants · roles · permissions"]
+
+        S1["tenant_anvogue_1<br/>properties · contracts · payments · leads"]
+
+        S2["tenant_eliterealty_2 ← ACTIVE<br/>properties · contracts · payments · leads"]
+
+        S3["tenant_homepro_3<br/>properties · contracts · payments · leads"]
     end
 
-    A1 & A2 & A3 --> REQ
+    A1 --> REQ
+    A2 --> REQ
+    A3 --> REQ
+
     REQ --> JWT
-    JWT --> F1 --> F2
+    JWT --> F1
+    F1 --> F2
     F2 --> TC
     TC --> HB
+
     HB --> PUB
     HB --> S1
     HB --> S2
     HB --> S3
 
-    style S2 stroke:#1D9E75,stroke-width:2px
-    style JWT fill:#FAEEDA,stroke:#BA7517
-    style TC fill:#FAEEDA,stroke:#BA7517
-    style HB fill:#E1F5EE,stroke:#1D9E75
+    class JWT,TC warning
+    class HB,S2 highlight
 ```
 ---
 
