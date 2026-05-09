@@ -27,11 +27,9 @@ public class SwaggerConfig {
                         new Server().url("http://localhost:8080").description("Development"),
                         new Server().url("https://api.yourdomain.com").description("Production")
                 ))
-                // Shto JWT security requirement globalisht
                 .addSecurityItem(
                         new SecurityRequirement().addList(SECURITY_SCHEME_NAME)
                 )
-                // Defino JWT Bearer scheme
                 .components(
                         new Components().addSecuritySchemes(
                                 SECURITY_SCHEME_NAME,

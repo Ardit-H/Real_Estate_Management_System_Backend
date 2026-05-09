@@ -3,6 +3,7 @@ package com.realestate.backend.service;
 import com.realestate.backend.dto.auth.*;
 import com.realestate.backend.entity.RefreshToken;
 import com.realestate.backend.entity.User;
+import com.realestate.backend.entity.auth.UserRole;
 import com.realestate.backend.entity.enums.Role;
 import com.realestate.backend.entity.tenant.TenantCompany;
 import com.realestate.backend.entity.tenant.TenantSchemaRegistry;
@@ -32,7 +33,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final SchemaProvisioningService provisioningService;
-
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Transactional
     public AuthResponse register(RegisterRequest req,
@@ -67,11 +69,15 @@ public class AuthService {
         user.setTenant(tenant);
         user.setIsActive(true);
 
-        user = userRepository.save(user);
+        final User savedUser = userRepository.save(user);
+
+        roleRepository.findByName(savedUser.getRole().name()).ifPresent(role ->
+                userRoleRepository.save(new UserRole(savedUser.getId(), role.getId()))
+        );
 
         String schemaName = provisioningService.provisionIfNeeded(tenant);
 
-        return buildAuthResponse(user, tenant, schemaName, ipAddress, userAgent);
+        return buildAuthResponse(savedUser, tenant, schemaName, ipAddress, userAgent);
     }
 
 
