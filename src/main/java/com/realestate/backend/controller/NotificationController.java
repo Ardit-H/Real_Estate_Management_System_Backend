@@ -7,9 +7,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.*;
-import org.springframework.http.*;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,65 +18,55 @@ import java.util.List;
 @RequiredArgsConstructor
 @Tag(name = "Notifications")
 @SecurityRequirement(name = "BearerAuth")
-public class NotificationController {
+public class NotificationController extends BaseController {
 
     private final NotificationService notificationService;
 
     @GetMapping
     @Operation(summary = "Njoftimet e mia (me pagination)")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<Page<NotificationResponse>> getMyNotifications(
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(
-                notificationService.getMyNotifications(PageRequest.of(page, size))
-        );
+        return ok(notificationService.getMyNotifications(page(page, size)));
     }
 
     @GetMapping("/unread")
     @Operation(summary = "Njoftimet e palexuara")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<List<NotificationResponse>> getUnread() {
-        return ResponseEntity.ok(notificationService.getUnread());
+        return ok(notificationService.getUnread());
     }
 
     @GetMapping("/unread/count")
     @Operation(summary = "Numri i njoftimeve të palexuara")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<UnreadCountResponse> getUnreadCount() {
-        return ResponseEntity.ok(notificationService.getUnreadCount());
+        return ok(notificationService.getUnreadCount());
     }
 
     @PatchMapping("/{id}/read")
     @Operation(summary = "Shëno njoftimin si të lexuar")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<Void> markOneRead(@PathVariable Long id) {
         notificationService.markOneRead(id);
-        return ResponseEntity.noContent().build();
+        return noContent();
     }
 
     @PatchMapping("/read-all")
     @Operation(summary = "Shëno të gjitha si të lexuara")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<BatchReadResponse> markAllRead() {
-        return ResponseEntity.ok(notificationService.markAllRead());
+        return ok(notificationService.markAllRead());
     }
 
     @DeleteMapping("/read")
     @Operation(summary = "Fshij njoftimet e lexuara")
-    @PreAuthorize("hasAnyRole('ADMIN','AGENT','CLIENT')")
     public ResponseEntity<Void> deleteRead() {
         notificationService.deleteRead();
-        return ResponseEntity.noContent().build();
+        return noContent();
     }
 
     @PostMapping
     @Operation(summary = "Krijo njoftim (vetëm ADMIN — për teste/manual)")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<NotificationResponse> create(
             @Valid @RequestBody NotificationCreateRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(notificationService.create(request));
+        return created(notificationService.create(request));
     }
 }

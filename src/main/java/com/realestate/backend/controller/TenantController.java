@@ -10,7 +10,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,38 +19,33 @@ import java.util.List;
 @RequiredArgsConstructor
 @Tag(name = "Tenant Management (Admin only)")
 @SecurityRequirement(name = "BearerAuth")
-public class TenantController {
+public class TenantController extends BaseController {
 
     private final TenantService tenantService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Krijo tenant të ri (Admin)")
     public ResponseEntity<TenantResponse> create(
             @Valid @RequestBody TenantRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(tenantService.createTenant(request));
+        return created(tenantService.createTenant(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Listo të gjithë tenant-ët (Admin)")
     public ResponseEntity<List<TenantResponse>> getAll() {
-        return ResponseEntity.ok(tenantService.getAllTenants());
+        return ok(tenantService.getAllTenants());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Merr tenant sipas ID (Admin)")
     public ResponseEntity<TenantResponse> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(tenantService.getTenantById(id));
+        return ok(tenantService.getTenantById(id));
     }
 
     @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Çaktivizo tenant (Admin)")
     public ResponseEntity<TenantResponse> deactivate(@PathVariable Long id) {
-        return ResponseEntity.ok(tenantService.deactivateTenant(id));
+        return ok(tenantService.deactivateTenant(id));
     }
 }
