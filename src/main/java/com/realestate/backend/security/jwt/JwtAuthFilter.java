@@ -18,6 +18,27 @@ import com.realestate.backend.multitenancy.TenantContext;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * JwtAuthFilter — authenticates every incoming request by validating the JWT.
+ *
+ * Runs before PermissionAuthorizationFilter in the security chain. Its only
+ * responsibility is authentication — verifying who the caller is. What they
+ * are allowed to do is handled separately by PermissionAuthorizationFilter.
+ *
+ * For each request with a valid Bearer token, this filter:
+ *   1. Validates the token signature and expiry (via JwtUtil)
+ *   2. Rejects refresh tokens used as access tokens
+ *   3. Extracts userId, tenantId, schemaName, role from the token claims
+ *   4. Populates TenantContext (ThreadLocal) so Hibernate routes to the correct schema
+ *   5. Sets Spring Security Authentication so @AuthenticationPrincipal works
+ *
+ * Requests without an Authorization header are passed through unchanged —
+ * public paths (auth, swagger) are handled by SecurityConfig.permitAll().
+ * Requests with an invalid or expired token receive a 401 immediately.
+ *
+ * TenantContext and SecurityContextHolder are always cleared in the finally
+ * block to prevent ThreadLocal pollution between requests on the same thread.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -27,10 +48,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
 
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/api/auth/**",
+            "/api/auth/",
             "/swagger-ui",
-            "/v3/api-docs",
-            "/actuator/health"
+            "/v3/api-docs"
     );
 
     @Override
@@ -55,7 +75,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        String token = authHeader.substring(7); // hiq "Bearer "
+        String token = authHeader.substring(7);
 
         try {
 
@@ -99,8 +119,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             log.error("JwtAuthFilter error: {}", ex.getMessage());
             sendError(response, HttpStatus.UNAUTHORIZED, "Autentikimi dështoi");
         } finally {
-
-            TenantContext.clear();
             SecurityContextHolder.clearContext();
         }
     }
