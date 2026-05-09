@@ -14,15 +14,16 @@ Client (React)
       | HTTP/REST
       v
 Controllers  — receive and validate HTTP requests, delegate to services
+             — extend BaseController for unified response handling (OOP/DRY)
 Services     — contain all business logic, orchestrate data access
-Repositories — data access layer using Spring Data JPA
+Repositories — data access layer using Spring Data JPA + JDBC
 Entities     — JPA-mapped domain models
 Database     — PostgreSQL with schema-based multi-tenancy
 ```
 
 ### Multi-Tenancy
 
-The system implements schema-based multi-tenancy using Hibernate's `MultiTenantConnectionProvider` interface. Each company (tenant) gets its own isolated PostgreSQL schema at registration time. The `public` schema holds shared data — users, tenants, refresh tokens. Every tenant schema holds per-company data — properties, contracts, payments, leads, notifications, and maintenance requests.
+The system implements schema-based multi-tenancy using Hibernate's `MultiTenantConnectionProvider` interface. Each company (tenant) gets its own isolated PostgreSQL schema at registration time. The `public` schema holds shared data — users, tenants, roles, permissions, refresh tokens. Every tenant schema holds per-company data — properties, contracts, payments, leads, notifications, and maintenance requests.
 
 The tenant is identified from the JWT token on every request. The `JwtAuthFilter` extracts `tenantId`, `schemaName`, `userId`, and `role` from the token, sets them on `TenantContext` (a `ThreadLocal` wrapper), and Hibernate uses the schema name to route all queries to the correct schema automatically.
 
@@ -40,11 +41,12 @@ Schema provisioning runs via Flyway when a new tenant registers. Migrations in `
 | ORM | Hibernate / Spring Data JPA |
 | Migrations | Flyway |
 | Security | Spring Security + JWT (JJWT 0.12) |
+| Authorization | Permission-Based RBAC (Middleware) |
 | Caching | Redis (Spring Cache) |
+| Background Jobs | Spring Scheduler |
 | AI Integration | Groq API (llama-3.1-8b-instant) |
 | Documentation | SpringDoc OpenAPI / Swagger UI |
 | Build | Maven |
-
 
 ---
 
@@ -70,11 +72,80 @@ The system is organized around these core domains:
 
 ## Authentication and Authorization
 
+### Authentication
 Authentication uses stateless JWT tokens. On login or register, the system returns an access token (1 hour) and a refresh token (7 days stored in the database). The `JwtAuthFilter` validates every request, extracts claims, populates `TenantContext`, and sets the Spring Security `Authentication` object.
 
-Authorization is enforced at two levels. `SecurityConfig` defines URL-level rules by HTTP method and role. `@PreAuthorize` annotations on controller methods enforce method-level access. Roles are `ADMIN`, `AGENT`, and `CLIENT`.
+### Authorization — Permission-Based RBAC
+Authorization is enforced entirely through middleware — zero `@PreAuthorize` annotations in controllers. The system uses a database-driven RBAC model:
 
-The `TenantContext` class wraps a `ThreadLocal<TenantInfo>` and exposes static helpers used throughout service classes to check the current user's role and ID without injecting additional dependencies.
+```
+REQUEST
+    ↓
+JwtAuthFilter — validate token, set TenantContext
+    ↓
+PermissionAuthorizationFilter — query DB, check METHOD + PATH
+    ↓
+CONTROLLER — zero @PreAuthorize, zero authorization logic
+```
+
+Permissions are stored in the `public` schema and consist of an HTTP method and an API path pattern. `AntPathMatcher` handles wildcard matching (e.g. `/api/properties/*`). The permission check uses JDBC directly — not Hibernate — to avoid schema routing conflicts in the multi-tenant setup.
+
+```sql
+-- Structure
+users → user_roles → roles → role_permissions → permissions(http_method, api_path)
+```
+
+Permissions can be granted or revoked at runtime without restarting the application. The `PermissionAdminController` exposes endpoints for managing roles and permissions dynamically.
+
+Roles are `ADMIN`, `AGENT`, and `CLIENT`. Every new user is automatically added to `user_roles` on registration based on their assigned role.
+
+---
+
+## BaseController — OOP/DRY Pattern
+
+All controllers except `AuthController` extend `BaseController`, which centralizes common response-building logic:
+
+```java
+public abstract class BaseController {
+    protected <T> ResponseEntity<T> ok(T body)          // 200 OK
+    protected <T> ResponseEntity<T> created(T body)     // 201 Created
+    protected ResponseEntity<Void> noContent()           // 204 No Content
+    protected PageRequest page(int page, int size)
+    protected PageRequest page(int page, int size, String sortBy, String sortDir)
+}
+```
+
+This eliminates repeated `ResponseEntity.ok(...)`, `PageRequest.of(...)`, and `HttpStatus.CREATED` boilerplate across all controllers — roughly 30-40% less code per controller — with zero impact on endpoints, Swagger documentation, or frontend behavior.
+
+`AuthController` does not extend `BaseController` because it contains specific logic (`getClientIp()`) that belongs only to the authentication flow.
+
+---
+
+## Caching — Redis
+
+Properties and notification counts are cached in Redis with a 10-minute TTL:
+
+```
+User → GET /api/properties/filter → miss → query DB → cache in Redis
+User → GET /api/properties/filter → hit  → return from Redis (0 DB queries)
+```
+
+`@Cacheable` is applied to read-heavy endpoints. `@CacheEvict` invalidates the cache automatically on create, update, and delete operations. `@EnableCaching` is configured on `BackendApplication`.
+
+---
+
+## Background Jobs — Spring Scheduler
+
+Four scheduled jobs run automatically in the background across all active tenant schemas:
+
+| Job | Schedule | Action |
+|---|---|---|
+| `markOverduePayments` | Daily 00:00 | Marks PENDING payments past due date as OVERDUE |
+| `checkExpiringContracts` | Daily 08:00 | Logs contracts expiring within 30 days |
+| `logSystemStats` | Every 6 hours | Logs active lease count per tenant |
+| `healthCheck` | Every 60 seconds | Logs active schema count |
+
+Each job iterates all provisioned tenant schemas, sets `TenantContext`, executes the operation, and clears the context in a `finally` block. `@EnableScheduling` is configured on `BackendApplication`.
 
 ---
 
@@ -87,14 +158,14 @@ Commission Total = Monthly Rent x 3%
 Owner Amount     = Monthly Rent x 97%
 
 Scenario 1 (property came from a completed lead):
-  RENT             -> property owner (97% minus already-paid deposits)
-  COMMISSION 50%   -> company
+  RENT                 -> property owner (97%)
+  COMMISSION 50%       -> company
   AGENT_COMMISSION 40% -> agent
-  CLIENT_BONUS 10% -> property owner
+  CLIENT_BONUS 10%     -> property owner
 
 Scenario 2 (company-owned property):
-  RENT             -> company (97% minus already-paid deposits)
-  COMMISSION 60%   -> company
+  RENT                 -> company (97%)
+  COMMISSION 60%       -> company
   AGENT_COMMISSION 40% -> agent
 ```
 
@@ -126,6 +197,7 @@ The API exposes over 60 REST endpoints. All endpoints require a Bearer JWT token
 | Notifications | /api/notifications |
 | Users and Profiles | /api/users |
 | Tenants | /api/admin/tenants |
+| Permission Management | /api/admin |
 | AI Features | /api/ai |
 
 Full interactive documentation is available at `http://localhost:8080/swagger-ui.html` when the application is running.
@@ -159,6 +231,14 @@ spring:
     url: jdbc:postgresql://localhost:5433/realestate_db
     username: realestate_user
     password: realestate_pass
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 jwt:
   secret: your-256-bit-secret-key-minimum-32-characters
@@ -167,7 +247,7 @@ jwt:
 
 groq:
   api:
-    key: your-groq-api-key
+    key: your-groq-api-key   # use "placeholder" for mock responses
 
 app:
   upload:
@@ -192,6 +272,12 @@ Flyway runs automatically on startup and applies all pending migrations. New ten
 
 **JWT contains all routing information** — The token carries `userId`, `tenantId`, `schemaName`, and `role`. This means every request is self-contained. No database lookup is needed to identify the tenant or authorize the user at the filter level.
 
+**JDBC direct in security middleware** — `PermissionAuthorizationFilter` and `PermissionRepository` use JDBC directly instead of JPA/Hibernate. This prevents Hibernate from applying the tenant `search_path` to permission queries, which must always read from the `public` schema regardless of the current tenant context.
+
+**Permission-based authorization over @PreAuthorize** — Permissions are stored in the database and checked at the middleware level. This means access control can be modified at runtime without code changes or application restarts. Granting or revoking a permission is a single SQL statement.
+
 **Commission payments are immutable records** — When a contract completes, the system creates explicit Payment or SalePayment rows for each recipient. These records are never modified retroactively. This creates a clear audit trail of who received what and when.
 
 **Soft deletes on core entities** — Properties, rental listings, and sale listings use a `deleted_at` timestamp column instead of hard deletes. All queries filter by `deleted_at IS NULL`. This preserves historical data and prevents orphaned references in contracts and applications.
+
+**BaseController for response consistency** — All controllers extend `BaseController` which provides unified helpers for building HTTP responses. This enforces consistent response patterns across the entire API and reduces boilerplate by 30-40% per controller with zero impact on endpoints or Swagger documentation.
