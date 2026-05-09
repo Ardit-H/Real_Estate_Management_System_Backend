@@ -20,24 +20,24 @@ import java.util.List;
 /**
  * SecurityConfig — Spring Security configuration.
  *
- * With the permission-based system, SecurityConfig ONLY:
- *   1. Defines public paths (without authentication)
- *   2. Requires authentication for everything else
+ * With the permission-based authorization system, this class only handles
+ * two responsibilities:
+ *   1. Public paths — accessible without a token (auth, swagger)
+ *   2. Everything else — requires a valid JWT (authentication only)
  *
- * Authorization (what each user is allowed to do) is handled entirely by:
- *   → PermissionAuthorizationFilter (middleware)
- *   → Based on DB: user_roles → role_permissions → permissions
+ * Authorization (what each authenticated user is allowed to do) is handled
+ * entirely by PermissionAuthorizationFilter, which queries the database:
+ *   users → user_roles → roles → role_permissions → permissions(http_method, api_path)
  *
- * No hasRole(), no hasAnyRole(), no hardcoded rules.
- * Adding new roles and permissions does not require code changes.
+ * No @PreAuthorize, no hasRole(), no hardcoded role checks anywhere.
+ * Granting or revoking access requires only a DB change — no code, no restart.
  */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter                  jwtAuthFilter;
-    private final PermissionAuthorizationFilter  permissionFilter;
+    private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -48,37 +48,14 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/actuator/health",
-                                "/uploads/**"
+                                "/v3/api-docs/**"
                         ).permitAll()
-
                         .anyRequest().authenticated()
                 )
-
-                .addFilterBefore(jwtAuthFilter,     UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(permissionFilter,   JwtAuthFilter.class)
-
-                .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((req, res, authEx) -> {
-                            res.setStatus(401);
-                            res.setContentType("application/json");
-                            res.getWriter().write(
-                                    "{\"error\":\"Unauthorized\",\"message\":\"Authentication required\"}"
-                            );
-                        })
-                        .accessDeniedHandler((req, res, accessEx) -> {
-                            res.setStatus(403);
-                            res.setContentType("application/json");
-                            res.getWriter().write(
-                                    "{\"error\":\"Forbidden\",\"message\":\"Insufficient permissions\"}"
-                            );
-                        })
-                );
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

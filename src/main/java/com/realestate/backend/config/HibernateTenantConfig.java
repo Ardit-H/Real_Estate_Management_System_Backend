@@ -17,6 +17,26 @@ import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
 
+
+/**
+ * HibernateTenantConfig — Manual JPA configuration for schema-based multi-tenancy.
+ *
+ * Spring Boot's auto-configuration does not support multi-tenancy, so this class
+ * manually builds the EntityManagerFactory and injects two custom Hibernate components:
+ *
+ *   - SchemaMultiTenantConnectionProvider
+ *     Intercepts every DB connection and executes:
+ *     SET search_path TO {schemaName}, public
+ *     so all queries automatically hit the correct tenant schema.
+ *
+ *   - TenantIdentifierResolver
+ *     Called before every query — reads the current schema from TenantContext
+ *     (ThreadLocal set by JwtAuthFilter) and tells Hibernate which tenant is active.
+ *
+ * The TransactionManager bean is required whenever EntityManagerFactory is overridden
+ * manually — without it, @Transactional across all services would fail.
+ */
+
 @Configuration
 @EnableJpaRepositories(
         basePackages = "com.realestate.backend.repository"
