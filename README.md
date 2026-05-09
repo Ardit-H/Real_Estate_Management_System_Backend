@@ -29,6 +29,49 @@ The tenant is identified from the JWT token on every request. The `JwtAuthFilter
 
 Schema provisioning runs via Flyway when a new tenant registers. Migrations in `db/migration/tenant` are applied to the new schema automatically. On application startup, `TenantMigrationService` runs pending migrations for all existing tenant schemas.
 
+## How Multi-Tenancy Works
+
+```mermaid
+flowchart TD
+    A1["🏢 Anvogue\nslug: anvogue · id: 1"]
+    A2["🏢 EliteRealty\nslug: eliterealty · id: 2"]
+    A3["🏢 HomePro\nslug: homepro · id: 3"]
+
+    REQ["HTTP Request\nGET /api/properties · Authorization: Bearer eyJhbGci..."]
+
+    JWT["JWT Token — all routing info packed inside\nuserId · tenantId · schemaName · role"]
+
+    subgraph FILTERS["Spring Security Filter Chain"]
+        F1["JwtAuthFilter\n1. validate token\n2. extract claims\n3. set TenantContext\n4. set Authentication"]
+        F2["PermissionAuthorizationFilter\n1. get userId from TenantContext\n2. JDBC → public.permissions\n3. AntPathMatcher check\n4. 403 or continue"]
+    end
+
+    TC["TenantContext — ThreadLocal\nuserId · tenantId · schema=tenant_eliterealty_2 · role"]
+
+    HB["SchemaMultiTenantConnectionProvider\nSET search_path TO tenant_eliterealty_2, public"]
+
+    subgraph DB["PostgreSQL — realestate_db"]
+        PUB["public schema — shared\nusers · tenants · roles · permissions"]
+        S1["tenant_anvogue_1\nproperties · contracts · payments · leads"]
+        S2["tenant_eliterealty_2 ← ACTIVE\nproperties · contracts · payments · leads"]
+        S3["tenant_homepro_3\nproperties · contracts · payments · leads"]
+    end
+
+    A1 & A2 & A3 --> REQ
+    REQ --> JWT
+    JWT --> F1 --> F2
+    F2 --> TC
+    TC --> HB
+    HB --> PUB
+    HB --> S1
+    HB --> S2
+    HB --> S3
+
+    style S2 stroke:#1D9E75,stroke-width:2px
+    style JWT fill:#FAEEDA,stroke:#BA7517
+    style TC fill:#FAEEDA,stroke:#BA7517
+    style HB fill:#E1F5EE,stroke:#1D9E75
+```
 ---
 
 
