@@ -21,18 +21,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * PermissionAuthorizationFilter — Middleware kryesor i autorizimit.
+ * PermissionAuthorizationFilter — database-driven authorization middleware.
  *
- * Ekzekutohet PAS JwtAuthFilter (userId është vendosur në TenantContext).
+ * Runs after JwtAuthFilter (userId is already set in TenantContext).
+ * Checks whether the authenticated user has a permission matching the
+ * current HTTP method and path before allowing the request to reach any controller.
  *
- * Logjika:
- *   1. Merr userId nga TenantContext
- *   2. Query DB: merr të gjitha permissions e userit nëpërmjet user_roles dhe role_permissions
- *   3. Kontrollo: ka permission me këtë HTTP Method + API Path?
- *   4. Po → vazhdo | Jo → 403 Forbidden
+ * Flow:
+ *   1. Read userId from TenantContext
+ *   2. Query public.permissions via user_roles and role_permissions
+ *   3. Match the result against the incoming method + path (AntPathMatcher)
+ *   4. Allow → continue chain | Deny → 403 Forbidden
  *
- * ZERO ndryshim në controller — gjithçka kontrollohet këtu.
- * Lejet menaxhohen nga DB pa ndryshim kodi.
+ * Uses JDBC directly instead of JPA to avoid triggering Hibernate's tenant
+ * schema routing — permissions always live in the public schema regardless
+ * of which tenant is making the request.
+ *
+ * Fail-safe: if the DB query throws an exception, access is denied.
  */
 @Slf4j
 @Component
@@ -41,20 +46,15 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
 
     private final DataSource dataSource;
 
-    // AntPathMatcher — suporton wildcard patterns si /api/properties/*
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    // ── Paths që kalojnë pa kontroll leje ─────────────────────
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/",
             "/swagger-ui",
             "/v3/api-docs",
-            "/actuator/health",
             "/uploads/"
     );
 
-    // ── Query SQL për lejet e userit ──────────────────────────
-    // Ndjek zinxhirin: user → user_roles → roles → role_permissions → permissions
     private static final String PERMISSIONS_QUERY = """
         SELECT DISTINCT p.http_method, p.api_path
         FROM public.permissions p
@@ -66,7 +66,6 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        // Kalon pa kontroll nëse path është publik
         return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
     }
 
@@ -77,7 +76,6 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
             @NonNull FilterChain         chain
     ) throws ServletException, IOException {
 
-        // Nëse nuk ka user të autentikuar — JwtAuthFilter e ka trajtuar tashmë
         Long userId = TenantContext.getUserId();
         if (userId == null) {
             chain.doFilter(request, response);
@@ -87,10 +85,8 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
         String requestMethod = request.getMethod();
         String requestPath   = request.getServletPath();
 
-        // ── Merr lejet e userit nga DB ────────────────────────
         List<Permission> userPermissions = getUserPermissions(userId);
 
-        // ── Kontrollo nëse ka leje për këtë Method + Path ─────
         boolean isAuthorized = userPermissions.stream().anyMatch(perm ->
                 perm.httpMethod().equalsIgnoreCase(requestMethod) &&
                         pathMatcher.match(perm.apiPath(), requestPath)
@@ -101,8 +97,7 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
                     userId, TenantContext.getRole(), requestMethod, requestPath);
             sendForbidden(response,
                     "Access denied. You do not have permission for " +
-                            requestMethod + " " + requestPath
-            );
+                            requestMethod + " " + requestPath);
             return;
         }
 
@@ -112,12 +107,9 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    // ── Query DB për lejet e userit ───────────────────────────
     private List<Permission> getUserPermissions(Long userId) {
         List<Permission> permissions = new ArrayList<>();
 
-        // Përdorim DataSource direkt (jo JPA) sepse jemi në middleware
-        // para se Hibernate të ketë vendosur schema për tenant
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(PERMISSIONS_QUERY)) {
 
@@ -134,13 +126,11 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
 
         } catch (Exception e) {
             log.error("Error fetching permissions for userId={}: {}", userId, e.getMessage());
-            // Në rast gabimi — refuzo aksesin (fail-safe)
         }
 
         return permissions;
     }
 
-    // ── 403 Forbidden response ────────────────────────────────
     private void sendForbidden(HttpServletResponse response, String message) throws IOException {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType("application/json");
@@ -151,6 +141,5 @@ public class PermissionAuthorizationFilter extends OncePerRequestFilter {
         ));
     }
 
-    // ── Record i brendshëm për permission ─────────────────────
     private record Permission(String httpMethod, String apiPath) {}
 }

@@ -11,6 +11,30 @@ import org.springframework.lang.NonNull;
 
 import java.io.IOException;
 
+/**
+ * LoggingFilter — HTTP request/response logging for every incoming request.
+ *
+ * Runs first in the filter chain (@Order(1)), before authentication and
+ * authorization, so every request is logged regardless of its outcome.
+ *
+ * Logs two lines per request:
+ *   INFO  → method, path, status, duration, tenantId, userId, ip
+ *   WARN  → additionally logs user-agent for any response with status >= 400
+ *
+ * TenantContext is read in the finally block (after the full filter chain
+ * completes) so tenantId and userId are available after JwtAuthFilter has
+ * already populated them. For unauthenticated requests (login, register),
+ * tenantId is null and the shorter log format is used instead.
+ *
+ * TenantContext.clear() is called at the end of the finally block — after
+ * logging — making this the single point of cleanup for the ThreadLocal.
+ * This guarantees the context is available for the entire request lifecycle
+ * and is always released before the thread returns to the pool.
+ *
+ * getClientIp() checks X-Forwarded-For first to handle requests that arrive
+ * through a reverse proxy or load balancer, where getRemoteAddr() would
+ * return the proxy IP instead of the real client IP.
+ */
 @Slf4j
 @Component
 @Order(1)
@@ -54,6 +78,7 @@ public class LoggingFilter extends OncePerRequestFilter {
                         method, path, status, ip,
                         userAgent != null ? userAgent.substring(0, Math.min(50, userAgent.length())) : "unknown");
             }
+            TenantContext.clear();
         }
     }
 

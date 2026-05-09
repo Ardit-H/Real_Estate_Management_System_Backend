@@ -13,6 +13,26 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * JwtUtil — JWT generation, validation, and claim extraction.
+ *
+ * Handles two token types:
+ *   - Access token  (1 hour)  — carries userId, tenantId, schemaName, role
+ *   - Refresh token (7 days)  — carries only userId, tenantId, and type="refresh"
+ *
+ * The signing key is derived from jwt.secret (minimum 32 characters / 256 bits,
+ * enforced at startup by @PostConstruct). The same key signs and verifies both
+ * token types — refresh tokens are distinguished by the "type" claim.
+ *
+ * Access token claims are the single source of truth for routing:
+ *   - schemaName → TenantContext → Hibernate search_path
+ *   - userId     → TenantContext → permission checks and ownership checks
+ *   - role       → TenantContext → service-layer role checks
+ *   - email      → Spring Security Authentication principal
+ *
+ * No database lookup is needed to identify the tenant or the user on any
+ * request — all routing information is self-contained in the token.
+ */
 @Slf4j
 @Component
 public class JwtUtil {
@@ -26,19 +46,20 @@ public class JwtUtil {
     @Value("${jwt.refresh-expiration-ms:604800000}")
     private long refreshExpirationMs;
 
+    private SecretKey signingKey;
 
     @PostConstruct
     public void validateSecret() {
         byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
             throw new IllegalStateException(
-                    "jwt.secret duhet të jetë minimum 32 karaktere (256 bit). " +
-                            "Gjatësia aktuale: " + keyBytes.length + " bytes."
+                    "jwt.secret must be at least 32 characters (256 bits). " +
+                            "Current length: " + keyBytes.length + " bytes."
             );
         }
-        log.info("JWT secret u validua me sukses ({} bytes)", keyBytes.length);
+        signingKey = Keys.hmacShaKeyFor(keyBytes);
+        log.info("JWT secret validated successfully ({} bytes)", keyBytes.length);
     }
-
 
     public String generateAccessToken(Long userId, String email,
                                       Long tenantId, String schemaName,
@@ -58,7 +79,6 @@ public class JwtUtil {
                 .compact();
     }
 
-
     public String generateRefreshToken(Long userId, Long tenantId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId",   userId);
@@ -73,7 +93,6 @@ public class JwtUtil {
                 .compact();
     }
 
-    // ── Parsim ───────────────────────────────────────────────────
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -88,11 +107,10 @@ public class JwtUtil {
     public String extractSchemaName(String token) { return extractAllClaims(token).get("schemaName", String.class); }
     public String extractRole(String token)       { return extractAllClaims(token).get("role",       String.class); }
 
-
     public boolean isTokenValid(String token) {
         try {
-            extractAllClaims(token);
-            return !isTokenExpired(token);
+            Claims claims = extractAllClaims(token);
+            return !claims.getExpiration().before(new Date());
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
@@ -107,12 +125,7 @@ public class JwtUtil {
         }
     }
 
-    private boolean isTokenExpired(String token) {
-        return extractAllClaims(token).getExpiration().before(new Date());
-    }
-
     private SecretKey getSigningKey() {
-        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
+        return signingKey;
     }
 }
