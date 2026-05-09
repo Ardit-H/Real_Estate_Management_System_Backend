@@ -1,5 +1,6 @@
 package com.realestate.backend.entity;
 
+import com.realestate.backend.entity.auth.RoleEntity;
 import com.realestate.backend.entity.enums.Role;
 import com.realestate.backend.entity.tenant.TenantCompany;
 import jakarta.persistence.*;
@@ -9,14 +10,16 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(
-        name = "users",
+        name   = "users",
         schema = "public",
         indexes = {
-                @Index(name = "idx_user_email", columnList = "email"),
+                @Index(name = "idx_user_email",  columnList = "email"),
                 @Index(name = "idx_user_tenant", columnList = "tenant_id")
         }
 )
@@ -43,6 +46,7 @@ public class User {
     @Column(name = "last_name", length = 50)
     private String lastName;
 
+    // Ruhet për backward compatibility
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role;
@@ -70,9 +74,22 @@ public class User {
     @Builder.Default
     private List<RefreshToken> refreshTokens = new ArrayList<>();
 
+    // ── Many-to-Many me RoleEntity ────────────────────────────
+    // IntelliJ diff do gjenerojë tabelën user_roles automatikisht
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            schema             = "public",
+            name               = "user_roles",
+            joinColumns        = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    @Builder.Default
+    private Set<RoleEntity> roles = new HashSet<>();
+
+    // ── Helpers ───────────────────────────────────────────────
+
     public String getFullName() {
-        return (firstName == null ? "" : firstName) +
-                " " +
-                (lastName == null ? "" : lastName);
+        return (firstName == null ? "" : firstName) + " " +
+                (lastName  == null ? "" : lastName);
     }
 }
