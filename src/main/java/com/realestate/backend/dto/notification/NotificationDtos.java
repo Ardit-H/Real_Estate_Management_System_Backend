@@ -7,6 +7,7 @@ import jakarta.validation.constraints.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.io.Serializable;
 
 public class NotificationDtos {
 
@@ -53,7 +54,7 @@ public class NotificationDtos {
 
     public record UnreadCountResponse(
             @JsonProperty("unread_count") long unreadCount
-    ) {}
+    )implements Serializable {}
 
     // ── BATCH READ ────────────────────────────────────────────
 

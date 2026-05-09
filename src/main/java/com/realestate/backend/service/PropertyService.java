@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
 @Slf4j
 @Service
@@ -39,12 +41,15 @@ public class PropertyService {
 
     // ── GET ALL ──────────────────────────────────────────────────
     @Transactional(readOnly = true)
+    @Cacheable(value = "properties", key = "#pageable")
     public Page<PropertySummaryResponse> getAll(Pageable pageable) {
+        log.info("[Cache] MISS — loading properties from DB"); // ← shto
         return propertyRepository.findAllByDeletedAtIsNull(pageable).map(this::toSummary);
     }
 
     // ── GET BY ID ────────────────────────────────────────────────
     @Transactional(readOnly = true)
+    @Cacheable(value = "property", key = "#id")
     public PropertyResponse getById(Long id) {
         Property p = findActive(id);
         propertyRepository.incrementViewCount(id);
@@ -53,6 +58,7 @@ public class PropertyService {
 
     // ── CREATE ───────────────────────────────────────────────────
     @Transactional
+    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public PropertyResponse create(PropertyCreateRequest req) {
         validateCreate(req);
 
@@ -92,6 +98,7 @@ public class PropertyService {
 
     // ── UPDATE ───────────────────────────────────────────────────
     @Transactional
+    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public PropertyResponse update(Long id, PropertyUpdateRequest req) {
         Property property = findActive(id);
         assertCanModify(property);
@@ -133,6 +140,7 @@ public class PropertyService {
 
     // ── DELETE ───────────────────────────────────────────────────
     @Transactional
+    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public void delete(Long id) {
         findActive(id);
         propertyRepository.softDelete(id);
@@ -149,6 +157,7 @@ public class PropertyService {
 
     // ── FEATURED ─────────────────────────────────────────────────
     @Transactional(readOnly = true)
+    @Cacheable(value = "featured-properties")
     public List<PropertySummaryResponse> getFeatured() {
         return propertyRepository.findByIsFeaturedTrueAndDeletedAtIsNull()
                 .stream().map(this::toSummary).toList();
