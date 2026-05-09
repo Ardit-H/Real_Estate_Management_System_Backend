@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.util.List;
 
@@ -31,6 +33,7 @@ public class NotificationService {
 
     // ── Numëro të palexuarat ──────────────────────────────────
     @Transactional(readOnly = true)
+    @Cacheable(value = "notif-count", key = "T(com.realestate.backend.multitenancy.TenantContext).getUserId()")
     public UnreadCountResponse getUnreadCount() {
         long count = notificationRepo.countByUserIdAndIsReadFalse(TenantContext.getUserId());
         return new UnreadCountResponse(count);
@@ -46,6 +49,7 @@ public class NotificationService {
 
     // ── Shëno një si të lexuar ────────────────────────────────
     @Transactional
+    @CacheEvict(value = "notif-count", allEntries = true)
     public void markOneRead(Long id) {
         Long userId = TenantContext.getUserId();
         int updated = notificationRepo.markOneRead(id, userId);
@@ -56,6 +60,7 @@ public class NotificationService {
 
     // ── Shëno të gjitha si të lexuara ─────────────────────────
     @Transactional
+    @CacheEvict(value = "notif-count", allEntries = true)
     public BatchReadResponse markAllRead() {
         int marked = notificationRepo.markAllReadForUser(TenantContext.getUserId());
         return new BatchReadResponse(marked, marked + " njoftime u shënuan si të lexuara");

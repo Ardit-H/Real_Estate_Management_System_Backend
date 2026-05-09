@@ -46,6 +46,8 @@ spring:
   # ==================== CACHE ====================
   cache:
     type: redis
+    redis:
+      time-to-live: 600000  # 10 minuta
 
   # ==================== MAIL ====================
   mail:

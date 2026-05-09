@@ -10,7 +10,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-
+import java.io.Serializable;
 
 
 public class PropertyDtos {
@@ -151,7 +151,7 @@ public class PropertyDtos {
             @JsonProperty("agent_id")      Long agentId,
             @JsonProperty("created_at")    LocalDateTime createdAt,
             @JsonProperty("updated_at")    LocalDateTime updatedAt
-    ) {}
+    )implements Serializable {}
 
 
 
@@ -173,7 +173,7 @@ public class PropertyDtos {
             @JsonProperty("primary_image") String primaryImage,
             @JsonProperty("agent_id")      Long agentId,
             @JsonProperty("created_at")    LocalDateTime createdAt
-    ) {}
+    )implements Serializable {}
 
 
 
