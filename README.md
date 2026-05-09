@@ -31,6 +31,7 @@ Schema provisioning runs via Flyway when a new tenant registers. Migrations in `
 
 ---
 
+
 ## Technology Stack
 
 | Layer | Technology |
@@ -98,6 +99,151 @@ users → user_roles → roles → role_permissions → permissions(http_method,
 Permissions can be granted or revoked at runtime without restarting the application. The `PermissionAdminController` exposes endpoints for managing roles and permissions dynamically.
 
 Roles are `ADMIN`, `AGENT`, and `CLIENT`. Every new user is automatically added to `user_roles` on registration based on their assigned role.
+
+---
+
+## Permission-Based Authorization — RBAC
+
+```mermaid
+erDiagram
+    users {
+        bigint id PK
+        string email
+        string role
+        bigint tenant_id FK
+    }
+
+    roles {
+        bigint id PK
+        string name
+        string description
+        boolean is_active
+    }
+
+    permissions {
+        bigint id PK
+        string name
+        string http_method
+        string api_path
+        string description
+    }
+
+    user_roles {
+        bigint user_id FK
+        bigint role_id FK
+    }
+
+    role_permissions {
+        bigint role_id FK
+        bigint permission_id FK
+    }
+
+    users ||--o{ user_roles : "has"
+    roles ||--o{ user_roles : "assigned to"
+    roles ||--o{ role_permissions : "grants"
+    permissions ||--o{ role_permissions : "granted via"
+```
+
+### How authorization flows at runtime
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant J as JwtAuthFilter
+    participant P as PermissionAuthorizationFilter
+    participant DB as public schema (PostgreSQL)
+    participant API as Controller
+
+    C->>J: HTTP Request + Bearer JWT
+    J->>J: validate token (JJWT)
+    J->>J: extract userId, schemaName, role
+    J->>J: set TenantContext (ThreadLocal)
+    J->>P: pass to next filter
+
+    P->>DB: SELECT p.http_method, p.api_path\nFROM permissions p\nJOIN role_permissions rp ON rp.permission_id = p.id\nJOIN user_roles ur ON ur.role_id = rp.role_id\nWHERE ur.user_id = ?
+
+    DB-->>P: list of allowed METHOD + PATH pairs
+
+    alt permission found (AntPathMatcher)
+        P->>API: request passes through
+        API-->>C: 200 OK + data
+    else no matching permission
+        P-->>C: 403 Forbidden
+    end
+```
+
+### Role permission matrix
+
+```mermaid
+flowchart LR
+    subgraph ROLES["Roles"]
+        ADMIN["ADMIN"]
+        AGENT["AGENT"]
+        CLIENT["CLIENT"]
+    end
+
+    subgraph ADMIN_PERMS["Admin permissions"]
+        AP1["GET /api/users"]
+        AP2["PATCH /api/users/*/role"]
+        AP3["PATCH /api/users/*/status"]
+        AP4["DELETE /api/users/*"]
+        AP5["POST /api/admin/tenants"]
+        AP6["POST /api/notifications"]
+        AP7["GET /api/admin/roles"]
+        AP8["POST /api/admin/permissions/roles/*"]
+    end
+
+    subgraph AGENT_PERMS["Agent permissions"]
+        AGP1["POST /api/properties"]
+        AGP2["PUT /api/properties/*"]
+        AGP3["DELETE /api/properties/*"]
+        AGP4["POST /api/rentals/listings"]
+        AGP5["POST /api/contracts/lease"]
+        AGP6["POST /api/payments"]
+        AGP7["PATCH /api/leads/*/assign"]
+        AGP8["PATCH /api/maintenance/*/assign"]
+    end
+
+    subgraph CLIENT_PERMS["Client permissions"]
+        CP1["GET /api/properties"]
+        CP2["GET /api/properties/*"]
+        CP3["POST /api/properties/saved/*"]
+        CP4["POST /api/rentals/applications"]
+        CP5["GET /api/rentals/applications/my"]
+        CP6["POST /api/leads"]
+        CP7["GET /api/users/me"]
+        CP8["POST /api/ai/chat"]
+    end
+
+    ADMIN --> AP1 & AP2 & AP3 & AP4 & AP5 & AP6 & AP7 & AP8
+    ADMIN --> AGP1 & AGP2 & AGP3 & AGP4 & AGP5 & AGP6 & AGP7 & AGP8
+    ADMIN --> CP1 & CP2 & CP3 & CP4 & CP5 & CP6 & CP7 & CP8
+
+    AGENT --> AGP1 & AGP2 & AGP3 & AGP4 & AGP5 & AGP6 & AGP7 & AGP8
+    AGENT --> CP1 & CP2 & CP7
+
+    CLIENT --> CP1 & CP2 & CP3 & CP4 & CP5 & CP6 & CP7 & CP8
+```
+
+### Runtime permission management — no restart needed
+
+```mermaid
+flowchart LR
+    subgraph GRANT["Grant permission"]
+        G["INSERT INTO role_permissions\nSELECT role_id, permission_id\nFROM roles, permissions\nWHERE roles.name = 'AGENT'\nAND permissions.name = 'ai.description'\nON CONFLICT DO NOTHING"]
+    end
+
+    subgraph REVOKE["Revoke permission"]
+        R["DELETE FROM role_permissions\nWHERE role_id = (SELECT id FROM roles WHERE name = 'CLIENT')\nAND permission_id = (SELECT id FROM permissions WHERE name = 'property.delete')"]
+    end
+
+    subgraph EFFECT["Takes effect"]
+        E["Next request by that user\nis allowed or denied\nimmediately — zero restart"]
+    end
+
+    GRANT --> EFFECT
+    REVOKE --> EFFECT
+```
 
 ---
 
