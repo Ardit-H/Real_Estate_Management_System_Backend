@@ -1,5 +1,6 @@
 package com.realestate.backend.service;
 
+import com.realestate.backend.repository.LeadRequestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,6 +17,7 @@ public class SchedulerService {
     private final PaymentService           paymentService;
     private final LeaseContractService     leaseContractService;
     private final SchemaRegistryRepository schemaRegistryRepo;
+    private final LeadRequestRepository leadRequestRepository;
 
     @Scheduled(cron = "0 0 0 * * *")
     public void markOverduePayments() {
@@ -81,11 +83,39 @@ public class SchedulerService {
                 activeSchemas().size());
     }
 
+    @Scheduled(cron = "0 0 9 * * MON")
+    public void weeklyAdminReport() {
+        for (var schema : activeSchemas()) {
+            try {
+                TenantContext.set(null, null, schema.getSchemaName(), "SYSTEM");
+                generateWeeklyReport(schema.getSchemaName());
+            } catch (Exception e) {
+                log.error("[WeeklyReport] Error for schema={}: {}",
+                        schema.getSchemaName(), e.getMessage());
+            } finally {
+                TenantContext.clear();
+            }
+        }
+    }
     // ── Helper ─────────────────────────────────────────────────
     private java.util.List<com.realestate.backend.entity.tenant.TenantSchemaRegistry> activeSchemas() {
         return schemaRegistryRepo.findAll()
                 .stream()
                 .filter(r -> Boolean.TRUE.equals(r.getIsProvisioned()))
                 .toList();
+    }
+    private void generateWeeklyReport(String schemaName) {
+        long overdueCount   = paymentService.markOverduePayments();
+        var  expiring       = leaseContractService.getExpiringSoon();
+        long unassignedLeads = leadRequestRepository.countByStatus(
+                com.realestate.backend.entity.enums.LeadStatus.NEW);
+
+        log.info("""
+        [WeeklyReport] Schema={}
+        ├─ Overdue payments:      {}
+        ├─ Expiring contracts:    {}
+        └─ Unassigned leads (NEW): {}
+        """,
+                schemaName, overdueCount, expiring.size(), unassignedLeads);
     }
 }
