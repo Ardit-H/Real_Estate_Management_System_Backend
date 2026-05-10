@@ -53,6 +53,7 @@ public class PropertyDtos {
             @Schema(allowableValues = {"APARTMENT","HOUSE","VILLA","COMMERCIAL","LAND","OFFICE"})
             PropertyType type,
 
+            @JsonProperty("listing_type")
             @Schema(allowableValues = {"SALE","RENT","BOTH"})
             ListingType listingType,
 
