@@ -81,4 +81,24 @@ public class AiDtos {
             @JsonProperty("raw_response") String rawResponse,
             String summary
     ) {}
+
+    // ── 7. Agent Performance ──────────────────────────────────
+    public record AgentPerformanceRequest(
+            @JsonProperty("agent_id")      Long   agentId,
+            @JsonProperty("agent_name")    String agentName,
+            @JsonProperty("total_leads")   int    totalLeads,
+            @JsonProperty("done_leads")    int    doneLeads,
+            @JsonProperty("active_leases") int    activeLeases,
+            @JsonProperty("total_sales")   int    totalSales,
+            @JsonProperty("revenue")       String revenue
+    ) {}
+
+    public record AgentPerformanceResponse(
+            @JsonProperty("agent_id")      Long   agentId,
+            @JsonProperty("score")         int    score,
+            @JsonProperty("level")         String level,
+            @JsonProperty("strengths")     String strengths,
+            @JsonProperty("weaknesses")    String weaknesses,
+            @JsonProperty("recommendation") String recommendation
+    ) {}
 }

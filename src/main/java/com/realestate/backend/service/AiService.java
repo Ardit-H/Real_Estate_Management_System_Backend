@@ -196,7 +196,43 @@ public class AiService {
         }
     }
 
+    public AgentPerformanceResponse analyzeAgentPerformance(AgentPerformanceRequest req) {
+        String prompt = String.format(
+                "You are an HR analyst for a real estate company.\n" +
+                        "Analyze the performance of agent '%s' (id=%d):\n" +
+                        "- Total leads assigned: %d\n" +
+                        "- Leads completed (DONE): %d\n" +
+                        "- Active lease contracts managed: %d\n" +
+                        "- Total sales closed: %d\n" +
+                        "- Revenue generated: %s EUR\n" +
+                        "Return ONLY this JSON (no markdown):\n" +
+                        "{\"score\": 7, \"level\": \"GOOD\", " +
+                        "\"strengths\": \"what they do well\", " +
+                        "\"weaknesses\": \"what needs improvement\", " +
+                        "\"recommendation\": \"concrete action\"}",
+                req.agentName(), req.agentId(),
+                req.totalLeads(), req.doneLeads(),
+                req.activeLeases(), req.totalSales(), req.revenue()
+        );
 
+        String raw = callOpenAI(prompt);
+        try {
+            int score = (int) parseDouble(extractField(raw, "score"));
+            String level = score >= 8 ? "EXCELLENT"
+                    : score >= 6 ? "GOOD"
+                    : score >= 4 ? "AVERAGE" : "NEEDS_IMPROVEMENT";
+            return new AgentPerformanceResponse(
+                    req.agentId(), score, level,
+                    extractField(raw, "strengths"),
+                    extractField(raw, "weaknesses"),
+                    extractField(raw, "recommendation")
+            );
+        } catch (Exception e) {
+            log.warn("AI agent performance parse failed: {}", e.getMessage());
+            return new AgentPerformanceResponse(
+                    req.agentId(), 5, "AVERAGE", raw, "N/A", "Review manually");
+        }
+    }
 
     // ════════════════════════════════════════════════════════════
     // OPENAI API CALLS
