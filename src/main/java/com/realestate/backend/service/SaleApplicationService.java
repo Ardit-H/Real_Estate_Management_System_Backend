@@ -25,6 +25,7 @@ public class SaleApplicationService {
     private final SaleApplicationRepository applicationRepo;
     private final SaleListingRepository     listingRepo;
     private final PropertyRepository        propertyRepo;
+    private final UserRepository userRepo;
 
     private static final Set<String> VALID_STATUSES =
             Set.of("PENDING", "APPROVED", "REJECTED", "CANCELLED");
@@ -225,12 +226,18 @@ public class SaleApplicationService {
     }
 
     private SaleApplicationAdminResponse toAdminResponse(SaleApplication a) {
+        String buyerName = userRepo.findFullNameById(a.getBuyerId()).orElse("Buyer #" + a.getBuyerId());
+        String agentName = a.getAgentId() != null
+                ? userRepo.findFullNameById(a.getAgentId()).orElse("Agent #" + a.getAgentId())
+                : null;
         return new SaleApplicationAdminResponse(
                 a.getId(),
                 a.getListing()  != null ? a.getListing().getId()  : null,
                 a.getProperty() != null ? a.getProperty().getId() : null,
                 a.getBuyerId(),
+                buyerName,
                 a.getAgentId(),
+                agentName,
                 a.getMessage(),
                 a.getOfferPrice(),
                 a.getDesiredPurchaseDate(),
