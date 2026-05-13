@@ -100,6 +100,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             log.debug("JWT valid — user={}, tenant={}, schema={}, role={}",
                     userId, tenantId, schemaName, role);
 
+            // Log impersonation if active
+            Long impersonatedBy = jwtUtil.extractImpersonatedBy(token);
+            if (impersonatedBy != null) {
+                log.warn("IMPERSONATION ACTIVE — admin={} acting as userId={}",
+                        impersonatedBy, userId);
+            }
+
 
             TenantContext.set(userId, tenantId, schemaName, role);
 

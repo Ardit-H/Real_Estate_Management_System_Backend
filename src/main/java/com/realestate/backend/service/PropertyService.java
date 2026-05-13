@@ -19,8 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 
 @Slf4j
 @Service
@@ -30,26 +28,16 @@ public class PropertyService {
     private final PropertyRepository             propertyRepository;
     private final PropertyPriceHistoryRepository priceHistoryRepository;
 
-    private static final List<String> VALID_STATUSES      = List.of("AVAILABLE","PENDING","SOLD","RENTED","INACTIVE");
-    private static final List<String> VALID_TYPES         = List.of("APARTMENT","HOUSE","VILLA","COMMERCIAL","LAND","OFFICE");
-    private static final List<String> VALID_LISTING_TYPES = List.of("SALE","RENT","BOTH");
-    private static final List<String> VALID_CURRENCIES    = List.of("EUR","USD","GBP","CHF","ALL","MKD");
-    private static final List<String> VALID_FEATURES      = List.of(
-            "parking","pool","furnished","elevator","balcony","garden",
-            "gym","security","air_conditioning","storage","fireplace"
-    );
+    private static final List<String> VALID_CURRENCIES = List.of("EUR","USD","GBP","CHF","ALL","MKD");
 
     // ── GET ALL ──────────────────────────────────────────────────
     @Transactional(readOnly = true)
-    @Cacheable(value = "properties", key = "#pageable")
     public Page<PropertySummaryResponse> getAll(Pageable pageable) {
-        log.info("[Cache] MISS — loading properties from DB"); // ← shto
         return propertyRepository.findAllByDeletedAtIsNull(pageable).map(this::toSummary);
     }
 
     // ── GET BY ID ────────────────────────────────────────────────
     @Transactional(readOnly = true)
-    @Cacheable(value = "property", key = "#id")
     public PropertyResponse getById(Long id) {
         Property p = findActive(id);
         propertyRepository.incrementViewCount(id);
@@ -58,7 +46,6 @@ public class PropertyService {
 
     // ── CREATE ───────────────────────────────────────────────────
     @Transactional
-    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public PropertyResponse create(PropertyCreateRequest req) {
         validateCreate(req);
 
@@ -98,7 +85,6 @@ public class PropertyService {
 
     // ── UPDATE ───────────────────────────────────────────────────
     @Transactional
-    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public PropertyResponse update(Long id, PropertyUpdateRequest req) {
         Property property = findActive(id);
         assertCanModify(property);
@@ -124,7 +110,7 @@ public class PropertyService {
         if (req.pricePerSqm()  != null) property.setPricePerSqm(req.pricePerSqm());
         if (req.isFeatured()   != null) property.setIsFeatured(req.isFeatured());
 
-        if (req.address() != null) property.setAddress(buildAddress(req.address()));
+        if (req.address()  != null) property.setAddress(buildAddress(req.address()));
 
         if (req.features() != null) {
             property.getFeatures().clear();
@@ -140,7 +126,6 @@ public class PropertyService {
 
     // ── DELETE ───────────────────────────────────────────────────
     @Transactional
-    @CacheEvict(value = {"properties", "property", "featured-properties"}, allEntries = true)
     public void delete(Long id) {
         findActive(id);
         propertyRepository.softDelete(id);
@@ -157,7 +142,6 @@ public class PropertyService {
 
     // ── FEATURED ─────────────────────────────────────────────────
     @Transactional(readOnly = true)
-    @Cacheable(value = "featured-properties")
     public List<PropertySummaryResponse> getFeatured() {
         return propertyRepository.findByIsFeaturedTrueAndDeletedAtIsNull()
                 .stream().map(this::toSummary).toList();
@@ -211,183 +195,109 @@ public class PropertyService {
                 .map(this::toSummary);
     }
 
+    // ── Validation ───────────────────────────────────────────────
     private void validateCreate(PropertyCreateRequest req) {
-        // Title
         if (req.title() == null || req.title().isBlank())
             throw new IllegalArgumentException("Titulli është i detyrueshëm");
         if (req.title().length() > 255)
             throw new IllegalArgumentException("Titulli max 255 karaktere");
-
-        // Description
         if (req.description() != null && req.description().length() > 5000)
             throw new IllegalArgumentException("Përshkrimi max 5000 karaktere");
-
-        // Price
         if (req.price() == null)
             throw new IllegalArgumentException("Çmimi është i detyrueshëm");
         if (req.price().compareTo(BigDecimal.ZERO) < 0)
             throw new IllegalArgumentException("Çmimi nuk mund të jetë negativ");
         if (req.price().compareTo(new BigDecimal("999999999")) > 0)
             throw new IllegalArgumentException("Çmimi shumë i madh");
-
-        // Price per sqm
         if (req.pricePerSqm() != null && req.pricePerSqm().compareTo(BigDecimal.ZERO) < 0)
             throw new IllegalArgumentException("Price per sqm nuk mund të jetë negativ");
-
-        // Area
         if (req.areaSqm() != null) {
             if (req.areaSqm().compareTo(BigDecimal.ZERO) < 0)
                 throw new IllegalArgumentException("Area nuk mund të jetë negative");
             if (req.areaSqm().compareTo(new BigDecimal("999999")) > 0)
                 throw new IllegalArgumentException("Area shumë e madhe");
         }
-
-        // Bedrooms / Bathrooms
-        if (req.bedrooms() != null && req.bedrooms() < 0)
-            throw new IllegalArgumentException("Bedrooms >= 0");
-        if (req.bedrooms() != null && req.bedrooms() > 100)
-            throw new IllegalArgumentException("Bedrooms max 100");
-        if (req.bathrooms() != null && req.bathrooms() < 0)
-            throw new IllegalArgumentException("Bathrooms >= 0");
-        if (req.bathrooms() != null && req.bathrooms() > 100)
-            throw new IllegalArgumentException("Bathrooms max 100");
-
-        // Floor
+        if (req.bedrooms()  != null && req.bedrooms()  < 0)   throw new IllegalArgumentException("Bedrooms >= 0");
+        if (req.bedrooms()  != null && req.bedrooms()  > 100) throw new IllegalArgumentException("Bedrooms max 100");
+        if (req.bathrooms() != null && req.bathrooms() < 0)   throw new IllegalArgumentException("Bathrooms >= 0");
+        if (req.bathrooms() != null && req.bathrooms() > 100) throw new IllegalArgumentException("Bathrooms max 100");
         if (req.floor() != null && req.totalFloors() != null && req.floor() > req.totalFloors())
             throw new IllegalArgumentException("Floor nuk mund të jetë më i madh se total_floors");
-
-        // Year built
         if (req.yearBuilt() != null) {
-            if (req.yearBuilt() < 1800)
-                throw new IllegalArgumentException("Year built >= 1800");
-            if (req.yearBuilt() > 2030)
-                throw new IllegalArgumentException("Year built <= 2030");
+            if (req.yearBuilt() < 1800) throw new IllegalArgumentException("Year built >= 1800");
+            if (req.yearBuilt() > 2030) throw new IllegalArgumentException("Year built <= 2030");
         }
-
-        // Currency
         if (req.currency() != null && !VALID_CURRENCIES.contains(req.currency().toUpperCase()))
             throw new IllegalArgumentException("Currency e pavlefshme: " + req.currency());
-
-        // Features
         if (req.features() != null) {
-            if (req.features().size() > 50)
-                throw new IllegalArgumentException("Max 50 features");
+            if (req.features().size() > 50) throw new IllegalArgumentException("Max 50 features");
             req.features().forEach(f -> {
-                if (f == null || f.isBlank())
-                    throw new IllegalArgumentException("Feature nuk mund të jetë bosh");
-                if (f.length() > 100)
-                    throw new IllegalArgumentException("Feature max 100 karaktere: " + f);
+                if (f == null || f.isBlank()) throw new IllegalArgumentException("Feature nuk mund të jetë bosh");
+                if (f.length() > 100)         throw new IllegalArgumentException("Feature max 100 karaktere: " + f);
             });
         }
-
-        // Address
         if (req.address() != null) validateAddress(req.address());
     }
 
     private void validateUpdate(PropertyUpdateRequest req, Property existing) {
-        // Title
         if (req.title() != null) {
-            if (req.title().isBlank())
-                throw new IllegalArgumentException("Titulli nuk mund të jetë bosh");
-            if (req.title().length() > 255)
-                throw new IllegalArgumentException("Titulli max 255 karaktere");
+            if (req.title().isBlank())      throw new IllegalArgumentException("Titulli nuk mund të jetë bosh");
+            if (req.title().length() > 255) throw new IllegalArgumentException("Titulli max 255 karaktere");
         }
-
-        // Price
         if (req.price() != null) {
             if (req.price().compareTo(BigDecimal.ZERO) < 0)
                 throw new IllegalArgumentException("Çmimi nuk mund të jetë negativ");
             if (req.price().compareTo(new BigDecimal("999999999")) > 0)
                 throw new IllegalArgumentException("Çmimi shumë i madh");
         }
-
-        // Area
-        if (req.areaSqm() != null && req.areaSqm().compareTo(BigDecimal.ZERO) < 0)
+        if (req.areaSqm()   != null && req.areaSqm().compareTo(BigDecimal.ZERO) < 0)
             throw new IllegalArgumentException("Area nuk mund të jetë negative");
-
-        // Bedrooms / Bathrooms
-        if (req.bedrooms() != null && req.bedrooms() < 0)
-            throw new IllegalArgumentException("Bedrooms >= 0");
-        if (req.bathrooms() != null && req.bathrooms() < 0)
-            throw new IllegalArgumentException("Bathrooms >= 0");
-
-        // Floor
+        if (req.bedrooms()  != null && req.bedrooms()  < 0) throw new IllegalArgumentException("Bedrooms >= 0");
+        if (req.bathrooms() != null && req.bathrooms() < 0) throw new IllegalArgumentException("Bathrooms >= 0");
         int floor       = req.floor()       != null ? req.floor()       : (existing.getFloor()       != null ? existing.getFloor()       : 0);
         int totalFloors = req.totalFloors()  != null ? req.totalFloors() : (existing.getTotalFloors()  != null ? existing.getTotalFloors()  : Integer.MAX_VALUE);
         if (floor > totalFloors)
             throw new IllegalArgumentException("Floor nuk mund të jetë më i madh se total_floors");
-
-        // Status — prona e shitur nuk mund të kthehet
         if (req.status() != null
                 && existing.getStatus() == PropertyStatus.SOLD
-                && req.status() != PropertyStatus.SOLD) {
+                && req.status() != PropertyStatus.SOLD)
             throw new IllegalArgumentException("Property e shitur nuk mund të ndryshohet");
-        }
-
-        // Currency
         if (req.currency() != null && !VALID_CURRENCIES.contains(req.currency().toUpperCase()))
             throw new IllegalArgumentException("Currency e pavlefshme: " + req.currency());
-
-        // Features
         if (req.features() != null && req.features().size() > 50)
             throw new IllegalArgumentException("Max 50 features");
-
-        // Year built
         if (req.yearBuilt() != null) {
-            if (req.yearBuilt() < 1800)
-                throw new IllegalArgumentException("Year built >= 1800");
-            if (req.yearBuilt() > 2030)
-                throw new IllegalArgumentException("Year built <= 2030");
+            if (req.yearBuilt() < 1800) throw new IllegalArgumentException("Year built >= 1800");
+            if (req.yearBuilt() > 2030) throw new IllegalArgumentException("Year built <= 2030");
         }
-
-        // Address
         if (req.address() != null) validateAddress(req.address());
     }
 
     private void validateAddress(AddressRequest addr) {
-        if (addr.city() != null && addr.city().length() > 100)
-            throw new IllegalArgumentException("City max 100 karaktere");
-        if (addr.country() != null && addr.country().length() > 100)
-            throw new IllegalArgumentException("Country max 100 karaktere");
-        if (addr.street() != null && addr.street().length() > 255)
-            throw new IllegalArgumentException("Street max 255 karaktere");
-        if (addr.zipCode() != null && addr.zipCode().length() > 20)
-            throw new IllegalArgumentException("Zip code max 20 karaktere");
-        if (addr.latitude() != null) {
-            double lat = addr.latitude().doubleValue();
-            if (lat < -90 || lat > 90)
-                throw new IllegalArgumentException("Latitude duhet të jetë ndërmjet -90 dhe 90");
-        }
-        if (addr.longitude() != null) {
-            double lng = addr.longitude().doubleValue();
-            if (lng < -180 || lng > 180)
-                throw new IllegalArgumentException("Longitude duhet të jetë ndërmjet -180 dhe 180");
-        }
+        if (addr.city()    != null && addr.city().length()    > 100) throw new IllegalArgumentException("City max 100 karaktere");
+        if (addr.country() != null && addr.country().length() > 100) throw new IllegalArgumentException("Country max 100 karaktere");
+        if (addr.street()  != null && addr.street().length()  > 255) throw new IllegalArgumentException("Street max 255 karaktere");
+        if (addr.zipCode() != null && addr.zipCode().length() > 20)  throw new IllegalArgumentException("Zip code max 20 karaktere");
+        if (addr.latitude()  != null) { double lat = addr.latitude().doubleValue();  if (lat < -90  || lat > 90)  throw new IllegalArgumentException("Latitude ndërmjet -90 dhe 90"); }
+        if (addr.longitude() != null) { double lng = addr.longitude().doubleValue(); if (lng < -180 || lng > 180) throw new IllegalArgumentException("Longitude ndërmjet -180 dhe 180"); }
     }
 
     private void validateFilter(PropertyFilterRequest req) {
-        if (req.minPrice() != null && req.maxPrice() != null
-                && req.minPrice().compareTo(req.maxPrice()) > 0)
+        if (req.minPrice()    != null && req.maxPrice()    != null && req.minPrice().compareTo(req.maxPrice()) > 0)
             throw new IllegalArgumentException("minPrice nuk mund të jetë më i madh se maxPrice");
-
-        if (req.minBedrooms() != null && req.maxBedrooms() != null
-                && req.minBedrooms() > req.maxBedrooms())
+        if (req.minBedrooms() != null && req.maxBedrooms() != null && req.minBedrooms() > req.maxBedrooms())
             throw new IllegalArgumentException("minBedrooms > maxBedrooms");
-
-        if (req.minArea() != null && req.maxArea() != null
-                && req.minArea().compareTo(req.maxArea()) > 0)
+        if (req.minArea()     != null && req.maxArea()     != null && req.minArea().compareTo(req.maxArea()) > 0)
             throw new IllegalArgumentException("minArea > maxArea");
-
-        if (req.minYearBuilt() != null && req.maxYearBuilt() != null
-                && req.minYearBuilt() > req.maxYearBuilt())
+        if (req.minYearBuilt()!= null && req.maxYearBuilt()!= null && req.minYearBuilt() > req.maxYearBuilt())
             throw new IllegalArgumentException("minYear > maxYear");
-
-        if (req.minPrice() != null && req.minPrice().compareTo(BigDecimal.ZERO) < 0)
+        if (req.minPrice()    != null && req.minPrice().compareTo(BigDecimal.ZERO) < 0)
             throw new IllegalArgumentException("minPrice >= 0");
-
-        if (req.minArea() != null && req.minArea().compareTo(BigDecimal.ZERO) < 0)
+        if (req.minArea()     != null && req.minArea().compareTo(BigDecimal.ZERO)  < 0)
             throw new IllegalArgumentException("minArea >= 0");
     }
+
+    // ── Helpers ──────────────────────────────────────────────────
     private Property findActive(Long id) {
         return propertyRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Prona nuk u gjet: " + id));
@@ -425,7 +335,7 @@ public class PropertyService {
                 .build();
     }
 
-    // ── Mappers ─────────────────────────────────────────────────
+    // ── Mappers ──────────────────────────────────────────────────
     private PropertyResponse toResponse(Property p) {
         AddressResponse addr = p.getAddress() == null ? null : new AddressResponse(
                 p.getAddress().getId(), p.getAddress().getStreet(),

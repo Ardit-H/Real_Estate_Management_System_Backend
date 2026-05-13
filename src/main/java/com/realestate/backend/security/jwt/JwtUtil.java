@@ -93,6 +93,30 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateImpersonationToken(
+            Long userId, String email, Long tenantId,
+            String schemaName, String role, Long impersonatedBy) {
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId",         userId);
+        claims.put("tenantId",       tenantId);
+        claims.put("schemaName",     schemaName);
+        claims.put("role",           role);
+        claims.put("impersonatedBy", impersonatedBy);
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public Long extractImpersonatedBy(String token) {
+        return extractAllClaims(token).get("impersonatedBy", Long.class);
+    }
+
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
