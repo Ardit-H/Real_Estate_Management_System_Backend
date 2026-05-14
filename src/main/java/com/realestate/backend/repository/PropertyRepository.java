@@ -41,16 +41,16 @@ public interface PropertyRepository
 
     @Query(
             value = """
-            SELECT * FROM properties
-            WHERE search_vector @@ plainto_tsquery('english', :keyword)
-              AND deleted_at IS NULL
-            ORDER BY ts_rank(search_vector, plainto_tsquery('english', :keyword)) DESC
-            """,
+        SELECT * FROM properties
+        WHERE search_vector @@ plainto_tsquery('simple', :keyword)
+          AND deleted_at IS NULL
+        ORDER BY ts_rank(search_vector, plainto_tsquery('simple', :keyword)) DESC
+        """,
             countQuery = """
-            SELECT COUNT(*) FROM properties
-            WHERE search_vector @@ plainto_tsquery('english', :keyword)
-              AND deleted_at IS NULL
-            """,
+        SELECT COUNT(*) FROM properties
+        WHERE search_vector @@ plainto_tsquery('simple', :keyword)
+          AND deleted_at IS NULL
+        """,
             nativeQuery = true
     )
     Page<Property> fullTextSearch(
