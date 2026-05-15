@@ -176,7 +176,6 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserResponse> getAgentsInTenant() {
-        assertIsAdminOrAgent();  // ← lejon edhe AGENT
         return userRepository.findAllByTenantId(TenantContext.getTenantId())
                 .stream()
                 .filter(u -> "AGENT".equalsIgnoreCase(u.getRole().name()))
@@ -184,12 +183,6 @@ public class UserService {
                 .toList();
     }
 
-    // Shto helper nëse nuk ekziston
-    private void assertIsAdminOrAgent() {
-        if (!TenantContext.hasRole("ADMIN", "AGENT")) {
-            throw new ForbiddenException("Vetëm ADMIN ose AGENT mund të kryejë këtë veprim");
-        }
-    }
     // Helpers
 
     private User findUser(Long id) {
