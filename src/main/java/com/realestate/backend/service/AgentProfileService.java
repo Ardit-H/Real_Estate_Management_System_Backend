@@ -94,6 +94,29 @@ public class AgentProfileService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public void addRating(Long userId, BigDecimal newStarScore) {
+        AgentProfile profile = agentProfileRepo.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Profili i agjentit nuk u gjet për user: " + userId));
+
+        int currentReviews = profile.getTotalReviews() != null ? profile.getTotalReviews() : 0;
+        BigDecimal currentRating = profile.getRating() != null ? profile.getRating() : BigDecimal.ZERO;
+
+        int newReviews = currentReviews + 1;
+        BigDecimal newRating = currentRating
+                .multiply(BigDecimal.valueOf(currentReviews))
+                .add(newStarScore)
+                .divide(BigDecimal.valueOf(newReviews), 2, java.math.RoundingMode.HALF_UP);
+
+        profile.setRating(newRating);
+        profile.setTotalReviews(newReviews);
+        agentProfileRepo.save(profile);
+
+        log.info("Agent userId={} u vlerësua me {} yje, rating i ri={}, total reviews={}",
+                userId, newStarScore, newRating, newReviews);
+    }
+
     // Helpers
 
     private void validateAgentProfileRequest(AgentProfileRequest req) {
