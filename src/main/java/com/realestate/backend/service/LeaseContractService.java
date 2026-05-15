@@ -98,9 +98,16 @@ public class LeaseContractService {
         assertIsAdminOrAgent();
         validateCreate(req);
 
-        contractRepo.findByProperty_IdAndStatus(req.propertyId(), LeaseStatus.ACTIVE)
-                .ifPresent(c -> { throw new ConflictException(
-                        "Prona ka tashmë kontratë aktive me id: " + c.getId()); });
+        boolean hasOverlap = contractRepo.existsOverlappingContract(
+                req.propertyId(),
+                req.startDate(),
+                req.endDate()
+        );
+        if (hasOverlap) {
+            throw new ConflictException(
+                    "Prona ka tashmë kontratë aktive ose në pritje në këto data"
+            );
+        }
 
         Property property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
                 .orElseThrow(() -> new ResourceNotFoundException(

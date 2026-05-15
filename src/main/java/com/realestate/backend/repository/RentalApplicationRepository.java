@@ -49,4 +49,10 @@ public interface RentalApplicationRepository extends JpaRepository<RentalApplica
 
     // Numëro aplikimet PENDING për një listing
     long countByListing_IdAndStatus(Long listingId, RentalApplicationStatus status);
+
+    boolean existsByListing_IdAndStatusAndIdNot(
+            Long listingId,
+            RentalApplicationStatus status,
+            Long excludeId
+    );
 }

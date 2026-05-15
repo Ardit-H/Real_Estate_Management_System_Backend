@@ -26,7 +26,22 @@ public interface LeaseContractRepository extends JpaRepository<LeaseContract, Lo
 
     // Kontratat sipas statusit
     Page<LeaseContract> findByStatusOrderByCreatedAtDesc(LeaseStatus status, Pageable pageable);
-
+    // Kontrollo overlap kontrate për të njëjtën pronë
+    @Query("""
+    SELECT COUNT(lc) > 0 FROM LeaseContract lc
+    WHERE lc.property.id = :propertyId
+      AND lc.status IN (
+          com.realestate.backend.entity.enums.LeaseStatus.ACTIVE,
+          com.realestate.backend.entity.enums.LeaseStatus.PENDING_SIGNATURE
+      )
+      AND lc.startDate < :endDate
+      AND lc.endDate > :startDate
+""")
+    boolean existsOverlappingContract(
+            @Param("propertyId") Long propertyId,
+            @Param("startDate")  java.time.LocalDate startDate,
+            @Param("endDate")    java.time.LocalDate endDate
+    );
     // Kontratat që skadojnë së shpejti (për notifikime)
     @Query("""
         SELECT lc FROM LeaseContract lc

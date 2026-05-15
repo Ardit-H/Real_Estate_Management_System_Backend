@@ -1,11 +1,14 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.rental.RentalDtos.*;
+import com.realestate.backend.entity.enums.ListingType;
 import com.realestate.backend.entity.enums.NotificationType;
+import com.realestate.backend.entity.enums.PropertyStatus;
 import com.realestate.backend.entity.enums.RentalApplicationStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.rental.RentalApplication;
 import com.realestate.backend.entity.rental.RentalListing;
+import com.realestate.backend.exception.BadRequestException;
 import com.realestate.backend.exception.ConflictException;
 import com.realestate.backend.exception.ForbiddenException;
 import com.realestate.backend.exception.ResourceNotFoundException;
@@ -57,6 +60,33 @@ public class RentalService {
     @Transactional
     public RentalListingResponse createListing(RentalListingCreateRequest req) {
         validateCreateListing(req);
+        Property propertyCheck = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Prona nuk u gjet: " + req.propertyId()));
+
+        if (propertyCheck.getListingType() == ListingType.SALE) {
+            throw new ConflictException(
+                    "Kjo pronë është vetëm për shitje — nuk mund të krijohet rental listing"
+            );
+        }
+        if (propertyCheck.getStatus() == PropertyStatus.SOLD) {
+            throw new ConflictException(
+                    "This property has been sold — cannot create rental listing"
+            );
+        }
+
+        if (req.availableFrom() != null && req.availableUntil() != null) {
+            boolean hasOverlap = listingRepo.existsOverlappingListing(
+                    req.propertyId(),
+                    req.availableFrom(),
+                    req.availableUntil()
+            );
+            if (hasOverlap) {
+                throw new ConflictException(
+                        "Prona ka tashmë listing aktiv në këto data"
+                );
+            }
+        }
 
         Property property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -128,10 +158,10 @@ public class RentalService {
 
     @Transactional
     public RentalApplicationResponse applyForListing(RentalApplicationCreateRequest req) {
-        validateApplication(req);
-
         Long clientId = TenantContext.getUserId();
         RentalListing listing = findActiveListing(req.listingId());
+
+        validateApplication(req, listing);
 
         if (!"ACTIVE".equals(listing.getStatus()))
             throw new ConflictException("Ky listing nuk është aktiv");
@@ -177,7 +207,18 @@ public class RentalService {
 
         if (app.getStatus() != RentalApplicationStatus.PENDING)
             throw new ConflictException("Ky aplikim është tashmë i shqyrtuar");
-
+        if (req.status() == RentalApplicationStatus.APPROVED) {
+            boolean hasApproved = applicationRepo.existsByListing_IdAndStatusAndIdNot(
+                    app.getListing().getId(),
+                    RentalApplicationStatus.APPROVED,
+                    id
+            );
+            if (hasApproved) {
+                throw new ConflictException(
+                        "This listing already has an approved application — cannot approve another"
+                );
+            }
+        }
         applicationRepo.reviewApplication(id, req.status(),
                 TenantContext.getUserId(), req.rejectionReason());
         RentalApplication reviewed = applicationRepo.findById(id).orElseThrow();
@@ -271,15 +312,33 @@ public class RentalService {
             throw new IllegalArgumentException("availableUntil duhet të jetë pas availableFrom");
     }
 
-    private void validateApplication(RentalApplicationCreateRequest req) {
+    private void validateApplication(RentalApplicationCreateRequest req,
+                                     RentalListing listing) {
         if (req.listingId() == null || req.listingId() <= 0)
-            throw new IllegalArgumentException("listingId i detyrueshëm");
+            throw new BadRequestException("Listing ID is required");
 
         if (req.income() != null && req.income().compareTo(BigDecimal.ZERO) < 0)
-            throw new IllegalArgumentException("Income >= 0");
+            throw new BadRequestException("Income cannot be negative");
 
         if (req.message() != null && req.message().length() > 2000)
-            throw new IllegalArgumentException("Message max 2000 karaktere");
+            throw new BadRequestException("Message cannot exceed 2000 characters");
+
+        if (req.moveInDate() != null) {
+            if (listing.getAvailableFrom() != null
+                    && req.moveInDate().isBefore(listing.getAvailableFrom())) {
+                throw new BadRequestException(
+                        "Move-in date cannot be before the listing start date: "
+                                + listing.getAvailableFrom()
+                );
+            }
+            if (listing.getAvailableUntil() != null
+                    && req.moveInDate().isAfter(listing.getAvailableUntil())) {
+                throw new BadRequestException(
+                        "Move-in date cannot be after the listing end date: "
+                                + listing.getAvailableUntil()
+                );
+            }
+        }
     }
 
 

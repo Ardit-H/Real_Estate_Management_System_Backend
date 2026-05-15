@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.*;
 
 @Slf4j
@@ -153,16 +154,31 @@ public class AiService {
 
     // ── 5. Payment Risk Detector ──────────────────────────────────
     public PaymentRiskResponse detectPaymentRisk(Long clientId) {
-        var contracts = contractRepo.findActiveByClient(clientId);
+
+        
+        // ── 1. Merr TË GJITHA kontratat — jo vetëm ACTIVE ──
+        var contracts = contractRepo.findByClientIdOrderByCreatedAtDesc(clientId,
+                        org.springframework.data.domain.Pageable.unpaged())
+                .getContent();
 
         long total   = 0;
         long overdue = 0;
+        LocalDate today = LocalDate.now();
+
         for (var c : contracts) {
             var payments = paymentRepo.findByContract_IdOrderByDueDateAsc(c.getId());
-            total   += payments.size();
+            total += payments.size();
+
+            // ── 2. Konsidero overdue: status=OVERDUE OSE PENDING me due_date të kaluar ──
             overdue += payments.stream()
-                    .filter(p -> p.getStatus() == PaymentStatus.OVERDUE).count();
+                    .filter(p ->
+                            p.getStatus() == PaymentStatus.OVERDUE ||
+                                    (p.getStatus() == PaymentStatus.PENDING
+                                            && p.getDueDate() != null
+                                            && p.getDueDate().isBefore(today))
+                    ).count();
         }
+        // ... pjesa tjetër mbetet njësoj
 
         String onTimeRate = total > 0
                 ? String.format("%.0f", ((double)(total - overdue) / total) * 100)

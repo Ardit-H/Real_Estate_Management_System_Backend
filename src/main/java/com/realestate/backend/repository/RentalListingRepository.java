@@ -33,6 +33,20 @@ public interface RentalListingRepository extends JpaRepository<RentalListing, Lo
     // Listim aktive
     Page<RentalListing> findByStatusAndDeletedAtIsNull(String status, Pageable pageable);
 
+    // Kontrollo overlap listing për të njëjtën pronë
+    @Query("""
+    SELECT COUNT(rl) > 0 FROM RentalListing rl
+    WHERE rl.property.id = :propertyId
+      AND rl.status = 'ACTIVE'
+      AND rl.deletedAt IS NULL
+      AND rl.availableFrom < :availableUntil
+      AND rl.availableUntil > :availableFrom
+""")
+    boolean existsOverlappingListing(
+            @Param("propertyId")    Long propertyId,
+            @Param("availableFrom") java.time.LocalDate availableFrom,
+            @Param("availableUntil") java.time.LocalDate availableUntil
+    );
     // Soft delete
     @Modifying
     @Query("""
@@ -50,4 +64,6 @@ public interface RentalListingRepository extends JpaRepository<RentalListing, Lo
         WHERE rl.id = :id
     """)
     void updateStatus(@Param("id") Long id, @Param("status") String status);
+
+
 }
