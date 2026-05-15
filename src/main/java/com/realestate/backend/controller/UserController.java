@@ -12,7 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -123,6 +125,16 @@ public class UserController extends BaseController {
             @Valid @RequestBody AgentProfileRequest request) {
         return ok(agentProfileService.updateProfile(userId, request));
     }
+
+    @PatchMapping("/agents/{userId}/rate")
+    @Operation(summary = "Rate an agent (CLIENT)")
+    public ResponseEntity<Void> rateAgent(
+            @PathVariable Long userId,
+            @RequestBody Map<String, Double> body) {
+        agentProfileService.addRating(userId, BigDecimal.valueOf(body.get("rating")));
+        return noContent();
+    }
+
 
     // ══════════════════ CLIENT PROFILES ══════════════════════════
 
