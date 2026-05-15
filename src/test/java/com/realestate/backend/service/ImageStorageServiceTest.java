@@ -115,7 +115,7 @@ class ImageStorageServiceTest {
             when(mockFile.getContentType()).thenReturn("application/pdf");
 
             assertThatThrownBy(() -> service.store(mockFile, 1L))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(com.realestate.backend.exception.BadRequestException.class)
                     .hasMessageContaining("JPEG");
         }
 
@@ -128,7 +128,7 @@ class ImageStorageServiceTest {
             when(mockFile.getSize()).thenReturn(sixMb);
 
             assertThatThrownBy(() -> service.store(mockFile, 1L))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(com.realestate.backend.exception.BadRequestException.class)
                     .hasMessageContaining("5MB");
         }
 

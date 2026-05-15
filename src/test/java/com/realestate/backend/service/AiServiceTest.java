@@ -13,11 +13,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,9 +46,6 @@ class AiServiceTest {
     @Test
     @DisplayName("generateDescription - kthen title dhe description nga mock")
     void generateDescription_returnsMockResponse() {
-        // String type, Integer bedrooms, Integer bathrooms,
-        // String areaSqm, Integer floor, Integer yearBuilt,
-        // String city, String features, String price
         PropertyDescriptionRequest req = new PropertyDescriptionRequest(
                 "APARTMENT", 2, 1,
                 "85", 3, 2015,
@@ -96,9 +97,6 @@ class AiServiceTest {
     void estimatePrice_returnsPositiveValues() {
         when(propertyRepo.countByStatus(PropertyStatus.AVAILABLE)).thenReturn(42L);
 
-        // String type, String areaSqm, Integer bedrooms,
-        // String city, Integer floor, Integer totalFloors,
-        // Integer yearBuilt, String listingType
         PriceEstimateRequest req = new PriceEstimateRequest(
                 "APARTMENT", "85", 2,
                 "Prishtinë", 3, 5,
@@ -233,9 +231,6 @@ class AiServiceTest {
     @Test
     @DisplayName("summarizeContract - kthen të gjitha fushat e nevojshme")
     void summarizeContract_returnsAllFields() {
-        // Long contractId, Long propertyId, Long clientId, Long agentId,
-        // String startDate, String endDate,
-        // String rent, String deposit, String status
         ContractSummaryRequest req = new ContractSummaryRequest(
                 1L, 10L, 5L, 3L,
                 "2024-01-01", "2025-01-01",
@@ -274,7 +269,8 @@ class AiServiceTest {
     @DisplayName("detectPaymentRisk - klient pa kontrata kthen response të vlefshme")
     void detectPaymentRisk_noContracts_returnsValidResponse() {
         Long clientId = 1L;
-        when(contractRepo.findActiveByClient(clientId)).thenReturn(List.of());
+        when(contractRepo.findByClientIdOrderByCreatedAtDesc(eq(clientId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         PaymentRiskResponse resp = aiService.detectPaymentRisk(clientId);
 
@@ -300,7 +296,8 @@ class AiServiceTest {
         Payment paidPayment = new Payment();
         paidPayment.setStatus(PaymentStatus.PAID);
 
-        when(contractRepo.findActiveByClient(clientId)).thenReturn(List.of(contract));
+        when(contractRepo.findByClientIdOrderByCreatedAtDesc(eq(clientId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(contract)));
         when(paymentRepo.findByContract_IdOrderByDueDateAsc(10L))
                 .thenReturn(List.of(overduePayment, paidPayment));
 
@@ -324,7 +321,8 @@ class AiServiceTest {
         Payment p2 = new Payment(); p2.setStatus(PaymentStatus.PAID);
         Payment p3 = new Payment(); p3.setStatus(PaymentStatus.PAID);
 
-        when(contractRepo.findActiveByClient(clientId)).thenReturn(List.of(contract));
+        when(contractRepo.findByClientIdOrderByCreatedAtDesc(eq(clientId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(contract)));
         when(paymentRepo.findByContract_IdOrderByDueDateAsc(20L))
                 .thenReturn(List.of(p1, p2, p3));
 
@@ -335,13 +333,14 @@ class AiServiceTest {
     }
 
     @Test
-    @DisplayName("detectPaymentRisk - thirr contractRepo.findActiveByClient me ID të saktë")
+    @DisplayName("detectPaymentRisk - thirr contractRepo me ID të saktë")
     void detectPaymentRisk_callsContractRepoWithCorrectId() {
         Long clientId = 99L;
-        when(contractRepo.findActiveByClient(clientId)).thenReturn(List.of());
+        when(contractRepo.findByClientIdOrderByCreatedAtDesc(eq(clientId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         aiService.detectPaymentRisk(clientId);
 
-        verify(contractRepo).findActiveByClient(99L);
+        verify(contractRepo).findByClientIdOrderByCreatedAtDesc(eq(99L), any(Pageable.class));
     }
 }
