@@ -1,5 +1,6 @@
 package com.realestate.backend.service;
 
+import com.realestate.backend.exception.BadRequestException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -31,12 +32,12 @@ public class ImageStorageService {
             throw new IllegalArgumentException("Fajlli është bosh");
         }
         if (!ALLOWED_TYPES.contains(file.getContentType())) {
-            throw new IllegalArgumentException(
+            throw new BadRequestException(
                     "Tipi i fajllit nuk lejohet. Lejo: JPEG, PNG, WEBP");
         }
         long maxBytes = maxSizeMb * 1024 * 1024;
         if (file.getSize() > maxBytes) {
-            throw new IllegalArgumentException(
+            throw new BadRequestException(
                     "Imazhi tejkalon madhësinë maksimale " + maxSizeMb + "MB");
         }
 
