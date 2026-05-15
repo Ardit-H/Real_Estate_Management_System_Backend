@@ -120,6 +120,10 @@ public class AuthService {
 
         User user = stored.getUser();
 
+        if (!user.getIsActive()) {
+            throw new UnauthorizedException("Account is deactivated");
+        }
+
         String schemaName = schemaRegistryRepository
                 .findByTenant_Id(user.getTenant().getId())
                 .map(TenantSchemaRegistry::getSchemaName)
