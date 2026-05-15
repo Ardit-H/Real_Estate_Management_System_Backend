@@ -49,7 +49,7 @@ public class NotificationService {
 
     // ── Shëno një si të lexuar ────────────────────────────────
     @Transactional
-    @CacheEvict(value = "notif-count", allEntries = true)
+    @CacheEvict(value = "notif-count", key = "T(com.realestate.backend.multitenancy.TenantContext).getUserId()")
     public void markOneRead(Long id) {
         Long userId = TenantContext.getUserId();
         int updated = notificationRepo.markOneRead(id, userId);
@@ -60,7 +60,7 @@ public class NotificationService {
 
     // ── Shëno të gjitha si të lexuara ─────────────────────────
     @Transactional
-    @CacheEvict(value = "notif-count", allEntries = true)
+    @CacheEvict(value = "notif-count",  key = "T(com.realestate.backend.multitenancy.TenantContext).getUserId()")
     public BatchReadResponse markAllRead() {
         int marked = notificationRepo.markAllReadForUser(TenantContext.getUserId());
         return new BatchReadResponse(marked, marked + " njoftime u shënuan si të lexuara");
