@@ -459,11 +459,17 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("CLIENT — hedh ForbiddenException")
-        void client_throws() {
+        @DisplayName("CLIENT — kthen vetëm agjentët e tenant-it")
+        void client_returnsAgents() {
             asUser(USER_ID);
-            assertThatThrownBy(() -> service.getAgentsInTenant())
-                    .isInstanceOf(ForbiddenException.class);
+            User agent  = buildUser(1L, Role.AGENT);
+            User client = buildUser(2L, Role.CLIENT);
+            when(userRepository.findAllByTenantId(TENANT_ID))
+                    .thenReturn(List.of(agent, client));
+
+            List<UserResponse> result = service.getAgentsInTenant();
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).role()).isEqualTo("AGENT");
         }
     }
 }
