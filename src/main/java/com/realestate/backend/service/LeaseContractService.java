@@ -52,7 +52,13 @@ public class LeaseContractService {
     // ── Listim ───────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public Page<LeaseContractSummary> getAll(Pageable pageable) {
-        return contractRepo.findByStatusOrderByCreatedAtDesc(LeaseStatus.ACTIVE, pageable)
+        return contractRepo.findAll(
+                        org.springframework.data.domain.PageRequest.of(
+                                pageable.getPageNumber(),
+                                pageable.getPageSize(),
+                                org.springframework.data.domain.Sort.by(
+                                        org.springframework.data.domain.Sort.Direction.DESC, "createdAt")
+                        ))
                 .map(this::toSummary);
     }
 
