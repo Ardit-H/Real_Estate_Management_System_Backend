@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.auth.*;
+import com.realestate.backend.entity.InviteToken;
 import com.realestate.backend.entity.RefreshToken;
 import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.auth.UserRole;
@@ -26,15 +27,16 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final TenantRepository tenantRepository;
-    private final SchemaRegistryRepository schemaRegistryRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
+    private final UserRepository            userRepository;
+    private final TenantRepository          tenantRepository;
+    private final SchemaRegistryRepository  schemaRegistryRepository;
+    private final RefreshTokenRepository    refreshTokenRepository;
+    private final PasswordEncoder           passwordEncoder;
+    private final JwtUtil                   jwtUtil;
     private final SchemaProvisioningService provisioningService;
-    private final RoleRepository roleRepository;
-    private final UserRoleRepository userRoleRepository;
+    private final RoleRepository            roleRepository;
+    private final UserRoleRepository        userRoleRepository;
+    private final InviteRepository          inviteRepository;   // ← e shtova
 
     @Transactional
     public AuthResponse register(RegisterRequest req,
@@ -44,6 +46,22 @@ public class AuthService {
             throw new ConflictException("Email ekziston");
         }
 
+        // ── Verifiko + shëno invite token si used (brenda transaksionit) ──────
+        if (req.inviteToken() != null && !req.inviteToken().isBlank()) {
+            InviteToken invite = inviteRepository.findByToken(req.inviteToken())
+                    .orElseThrow(() -> new UnauthorizedException("Invite token i pavlefshëm"));
+
+            if (!invite.isValid()) {
+                throw new UnauthorizedException("Invite token ka skaduar ose është përdorur");
+            }
+
+            // Shëno si used — brenda së njëjtës @Transactional
+            // Nëse register dështon → rollback → token mbetet valid
+            invite.setUsed(true);
+            inviteRepository.save(invite);
+        }
+
+        // ── Gjej ose krijo tenant ─────────────────────────────────────────────
         TenantCompany tenant = tenantRepository.findBySlug(req.tenantSlug())
                 .orElseGet(() -> {
                     TenantCompany t = new TenantCompany();
@@ -58,6 +76,7 @@ public class AuthService {
             throw new UnauthorizedException("Tenant i çaktivizuar");
         }
 
+        // ── Krijo userin ──────────────────────────────────────────────────────
         User user = new User();
         user.setEmail(req.email());
         user.setPassword(passwordEncoder.encode(req.password()));
@@ -80,7 +99,6 @@ public class AuthService {
         return buildAuthResponse(savedUser, tenant, schemaName, ipAddress, userAgent);
     }
 
-
     @Transactional
     public AuthResponse login(LoginRequest req,
                               String ipAddress, String userAgent) {
@@ -96,12 +114,10 @@ public class AuthService {
             throw new UnauthorizedException("Tenant i çaktivizuar");
         }
 
-
         String schemaName = provisioningService.provisionIfNeeded(user.getTenant());
 
         return buildAuthResponse(user, user.getTenant(), schemaName, ipAddress, userAgent);
     }
-
 
     @Transactional
     public RefreshResponse refresh(RefreshRequest req) {
@@ -130,16 +146,13 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException("Schema nuk gjendet"));
 
         String newAccessToken = jwtUtil.generateAccessToken(
-                user.getId(),
-                user.getEmail(),
-                user.getTenant().getId(),
-                schemaName,
+                user.getId(), user.getEmail(),
+                user.getTenant().getId(), schemaName,
                 user.getRole().name()
         );
 
         return new RefreshResponse(newAccessToken);
     }
-
 
     @Transactional
     public void logout(String refreshToken) {
@@ -149,7 +162,6 @@ public class AuthService {
                     refreshTokenRepository.save(t);
                 });
     }
-
 
     private AuthResponse buildAuthResponse(User user, TenantCompany tenant,
                                            String schemaName,
@@ -170,7 +182,6 @@ public class AuthService {
                 tenant.getId(), tenant.getName(), schemaName
         );
     }
-
 
     private void saveRefreshToken(User user, String token,
                                   String ipAddress, String userAgent) {

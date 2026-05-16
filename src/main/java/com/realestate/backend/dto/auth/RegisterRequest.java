@@ -33,12 +33,15 @@ public record RegisterRequest(
                 example = "acme-inc")
         @NotBlank(message = "Tenant slug nuk mund të jetë bosh")
         @Pattern(
-                regexp = "^[a-z0-9-]{3,50}$",
+                regexp = "^[a-z0-9_-]{3,50}$",
                 message = "Slug duhet të përmbajë vetëm shkronja të vogla, numra dhe vizë"
         )
         String tenantSlug,
 
         @Schema(description = "Emri i plotë i kompanisë", example = "Acme Real Estate")
-        String tenantName
+        String tenantName,
+
+        @Schema(description = "Token i invitation (opcional)")
+        String inviteToken
 
 ) {}

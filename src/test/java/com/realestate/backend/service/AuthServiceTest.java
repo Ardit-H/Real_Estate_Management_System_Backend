@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.auth.*;
+import com.realestate.backend.entity.InviteToken;
 import com.realestate.backend.entity.RefreshToken;
 import com.realestate.backend.entity.User;
 import com.realestate.backend.entity.enums.Role;
@@ -27,15 +28,16 @@ import static org.mockito.Mockito.*;
 @DisplayName("AuthService — Unit Tests")
 class AuthServiceTest {
 
-    @Mock UserRepository             userRepository;
-    @Mock TenantRepository           tenantRepository;
-    @Mock SchemaRegistryRepository   schemaRegistryRepository;
-    @Mock RefreshTokenRepository     refreshTokenRepository;
-    @Mock PasswordEncoder            passwordEncoder;
-    @Mock JwtUtil                    jwtUtil;
-    @Mock SchemaProvisioningService  provisioningService;
-    @Mock RoleRepository             roleRepository;
-    @Mock UserRoleRepository         userRoleRepository;
+    @Mock UserRepository            userRepository;
+    @Mock TenantRepository          tenantRepository;
+    @Mock SchemaRegistryRepository  schemaRegistryRepository;
+    @Mock RefreshTokenRepository    refreshTokenRepository;
+    @Mock PasswordEncoder           passwordEncoder;
+    @Mock JwtUtil                   jwtUtil;
+    @Mock SchemaProvisioningService provisioningService;
+    @Mock RoleRepository            roleRepository;
+    @Mock UserRoleRepository        userRoleRepository;
+    @Mock InviteRepository          inviteRepository;   // ← e shtova
 
     @InjectMocks AuthService service;
 
@@ -45,7 +47,7 @@ class AuthServiceTest {
     private static final String ACCESS  = "access-token";
     private static final String REFRESH = "refresh-token";
 
-    // ── Helpers ──────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private TenantCompany activeTenant(Long id, String slug) {
         TenantCompany t = new TenantCompany();
@@ -66,37 +68,51 @@ class AuthServiceTest {
         return u;
     }
 
+    private InviteToken validInvite(TenantCompany tenant, String token) {
+        return InviteToken.builder()
+                .token(token)
+                .tenant(tenant)
+                .role("CLIENT")
+                .used(false)
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .build();
+    }
+
     private void stubTokenGeneration() {
         when(jwtUtil.generateAccessToken(any(), any(), any(), any(), any())).thenReturn(ACCESS);
         when(jwtUtil.generateRefreshToken(any(), any())).thenReturn(REFRESH);
     }
 
-    // ── register() ───────────────────────────────────────────────
+    private void stubRegisterCommon(TenantCompany tenant, User savedUser) {
+        when(passwordEncoder.encode(any())).thenReturn("encoded");
+        when(userRepository.save(any())).thenReturn(savedUser);
+        when(roleRepository.findByName(any())).thenReturn(Optional.empty());
+        when(provisioningService.provisionIfNeeded(tenant)).thenReturn(SCHEMA);
+        stubTokenGeneration();
+    }
+
+    // ── register() ───────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("register()")
     class Register {
 
         @Test
-        @DisplayName("sukses — krijon user dhe tenant të ri")
-        void success_newTenant() {
+        @DisplayName("sukses — krijon user dhe tenant të ri (pa inviteToken)")
+        void success_newTenant_noInvite() {
             RegisterRequest req = new RegisterRequest(
                     "new@test.com", "Pass1234", "Ardit", "H",
-                    "CLIENT", "new-tenant", null);
+                    "CLIENT", "new-tenant", null, null);
 
             when(userRepository.existsByEmail("new@test.com")).thenReturn(false);
             when(tenantRepository.findBySlug("new-tenant")).thenReturn(Optional.empty());
 
             TenantCompany savedTenant = activeTenant(1L, "new-tenant");
             when(tenantRepository.save(any())).thenReturn(savedTenant);
-            when(passwordEncoder.encode("Pass1234")).thenReturn("encoded");
 
             User savedUser = activeUser(10L, savedTenant);
             savedUser.setEmail("new@test.com");
-            when(userRepository.save(any())).thenReturn(savedUser);
-            when(roleRepository.findByName(any())).thenReturn(Optional.empty());
-            when(provisioningService.provisionIfNeeded(savedTenant)).thenReturn(SCHEMA);
-            stubTokenGeneration();
+            stubRegisterCommon(savedTenant, savedUser);
 
             AuthResponse resp = service.register(req, IP, UA);
 
@@ -106,38 +122,126 @@ class AuthServiceTest {
             verify(tenantRepository).save(any());
             verify(userRepository).save(any());
             verify(refreshTokenRepository).save(any());
+            verify(inviteRepository, never()).findByToken(any());
         }
 
         @Test
-        @DisplayName("sukses — tenant ekzistues rifoloshet")
-        void success_existingTenant() {
+        @DisplayName("sukses — tenant ekzistues rifoloshet (pa inviteToken)")
+        void success_existingTenant_noInvite() {
             RegisterRequest req = new RegisterRequest(
                     "agent@test.com", "Pass1234", "Ana", "B",
-                    "AGENT", "existing-slug", "ExistingCo");
+                    "AGENT", "existing-slug", "ExistingCo", null);
 
             when(userRepository.existsByEmail("agent@test.com")).thenReturn(false);
             TenantCompany existing = activeTenant(2L, "existing-slug");
             when(tenantRepository.findBySlug("existing-slug")).thenReturn(Optional.of(existing));
-            when(passwordEncoder.encode(any())).thenReturn("encoded");
 
             User savedUser = activeUser(11L, existing);
             savedUser.setEmail("agent@test.com");
-            when(userRepository.save(any())).thenReturn(savedUser);
-            when(roleRepository.findByName(any())).thenReturn(Optional.empty());
-            when(provisioningService.provisionIfNeeded(existing)).thenReturn(SCHEMA);
-            stubTokenGeneration();
+            stubRegisterCommon(existing, savedUser);
 
             AuthResponse resp = service.register(req, IP, UA);
 
             assertThat(resp.tenantId()).isEqualTo(2L);
             verify(tenantRepository, never()).save(any());
+            verify(inviteRepository, never()).findByToken(any());
+        }
+
+        @Test
+        @DisplayName("sukses — me inviteToken valid, shënon si used")
+        void success_withValidInviteToken() {
+            String token = "abc123validtoken";
+            TenantCompany tenant = activeTenant(3L, "banana");
+
+            RegisterRequest req = new RegisterRequest(
+                    "invited@test.com", "Pass1234", "Ion", "B",
+                    "CLIENT", "banana", "banana", token);
+
+            when(userRepository.existsByEmail("invited@test.com")).thenReturn(false);
+
+            InviteToken invite = validInvite(tenant, token);
+            when(inviteRepository.findByToken(token)).thenReturn(Optional.of(invite));
+            when(inviteRepository.save(invite)).thenReturn(invite);
+
+            when(tenantRepository.findBySlug("banana")).thenReturn(Optional.of(tenant));
+
+            User savedUser = activeUser(20L, tenant);
+            savedUser.setEmail("invited@test.com");
+            stubRegisterCommon(tenant, savedUser);
+
+            AuthResponse resp = service.register(req, IP, UA);
+
+            assertThat(resp.accessToken()).isEqualTo(ACCESS);
+            assertThat(invite.getUsed()).isTrue();         // ← token shënuar si used
+            verify(inviteRepository).save(invite);
+        }
+
+        @Test
+        @DisplayName("hedh UnauthorizedException kur inviteToken nuk ekziston")
+        void throws_whenInviteTokenNotFound() {
+            RegisterRequest req = new RegisterRequest(
+                    "x@test.com", "Pass1234", "A", "B",
+                    "CLIENT", "slug", null, "invalid-token");
+
+            when(userRepository.existsByEmail(any())).thenReturn(false);
+            when(inviteRepository.findByToken("invalid-token")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.register(req, IP, UA))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("pavlefshëm");
+        }
+
+        @Test
+        @DisplayName("hedh UnauthorizedException kur inviteToken është used")
+        void throws_whenInviteTokenAlreadyUsed() {
+            String token = "used-token";
+            TenantCompany tenant = activeTenant(1L, "slug");
+
+            RegisterRequest req = new RegisterRequest(
+                    "x@test.com", "Pass1234", "A", "B",
+                    "CLIENT", "slug", null, token);
+
+            when(userRepository.existsByEmail(any())).thenReturn(false);
+
+            InviteToken usedInvite = validInvite(tenant, token);
+            usedInvite.setUsed(true);
+            when(inviteRepository.findByToken(token)).thenReturn(Optional.of(usedInvite));
+
+            assertThatThrownBy(() -> service.register(req, IP, UA))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("përdorur");
+        }
+
+        @Test
+        @DisplayName("hedh UnauthorizedException kur inviteToken ka skaduar")
+        void throws_whenInviteTokenExpired() {
+            String token = "expired-token";
+            TenantCompany tenant = activeTenant(1L, "slug");
+
+            RegisterRequest req = new RegisterRequest(
+                    "x@test.com", "Pass1234", "A", "B",
+                    "CLIENT", "slug", null, token);
+
+            when(userRepository.existsByEmail(any())).thenReturn(false);
+
+            InviteToken expiredInvite = InviteToken.builder()
+                    .token(token).tenant(tenant).role("CLIENT")
+                    .used(false)
+                    .expiresAt(LocalDateTime.now().minusDays(1))  // ← skaduar
+                    .build();
+            when(inviteRepository.findByToken(token)).thenReturn(Optional.of(expiredInvite));
+
+            assertThatThrownBy(() -> service.register(req, IP, UA))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("skaduar");
         }
 
         @Test
         @DisplayName("hedh ConflictException kur email ekziston")
         void throws_whenEmailExists() {
             RegisterRequest req = new RegisterRequest(
-                    "dup@test.com", "Pass1234", "A", "B", null, "slug", null);
+                    "dup@test.com", "Pass1234", "A", "B",
+                    null, "slug", null, null);
             when(userRepository.existsByEmail("dup@test.com")).thenReturn(true);
 
             assertThatThrownBy(() -> service.register(req, IP, UA))
@@ -149,7 +253,8 @@ class AuthServiceTest {
         @DisplayName("hedh UnauthorizedException kur tenant është i çaktivizuar")
         void throws_whenTenantInactive() {
             RegisterRequest req = new RegisterRequest(
-                    "x@test.com", "Pass1234", "A", "B", null, "inactive-slug", null);
+                    "x@test.com", "Pass1234", "A", "B",
+                    null, "inactive-slug", null, null);
             when(userRepository.existsByEmail(any())).thenReturn(false);
             TenantCompany inactive = activeTenant(3L, "inactive-slug");
             inactive.setIsActive(false);
@@ -164,14 +269,15 @@ class AuthServiceTest {
         @DisplayName("role default CLIENT kur nuk specifikohet")
         void defaultRole_isClient() {
             RegisterRequest req = new RegisterRequest(
-                    "c@test.com", "Pass1234", "C", "D", null, "slug", null);
+                    "c@test.com", "Pass1234", "C", "D",
+                    null, "slug", null, null);
             when(userRepository.existsByEmail(any())).thenReturn(false);
             TenantCompany tenant = activeTenant(1L, "slug");
             when(tenantRepository.findBySlug("slug")).thenReturn(Optional.of(tenant));
-            when(passwordEncoder.encode(any())).thenReturn("enc");
 
             ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
             User saved = activeUser(1L, tenant);
+            when(passwordEncoder.encode(any())).thenReturn("enc");
             when(userRepository.save(captor.capture())).thenReturn(saved);
             when(roleRepository.findByName(any())).thenReturn(Optional.empty());
             when(provisioningService.provisionIfNeeded(any())).thenReturn(SCHEMA);
@@ -183,7 +289,7 @@ class AuthServiceTest {
         }
     }
 
-    // ── login() ──────────────────────────────────────────────────
+    // ── login() ──────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("login()")
@@ -196,8 +302,7 @@ class AuthServiceTest {
             User user = activeUser(10L, tenant);
             LoginRequest req = new LoginRequest("user@test.com", "raw-pass");
 
-            when(userRepository.findActiveByEmail("user@test.com"))
-                    .thenReturn(Optional.of(user));
+            when(userRepository.findActiveByEmail("user@test.com")).thenReturn(Optional.of(user));
             when(passwordEncoder.matches("raw-pass", "encoded-pass")).thenReturn(true);
             when(provisioningService.provisionIfNeeded(tenant)).thenReturn(SCHEMA);
             stubTokenGeneration();
@@ -249,7 +354,7 @@ class AuthServiceTest {
         }
     }
 
-    // ── refresh() ────────────────────────────────────────────────
+    // ── refresh() ────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("refresh()")
@@ -338,7 +443,7 @@ class AuthServiceTest {
         }
     }
 
-    // ── logout() ─────────────────────────────────────────────────
+    // ── logout() ─────────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("logout()")
