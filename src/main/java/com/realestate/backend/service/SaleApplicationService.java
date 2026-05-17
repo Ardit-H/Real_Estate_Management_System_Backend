@@ -1,6 +1,7 @@
 package com.realestate.backend.service;
 
 import com.realestate.backend.dto.sale.SaleApplicationDtos.*;
+import com.realestate.backend.entity.enums.PropertyStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleApplication;
 import com.realestate.backend.entity.sale.SaleListing;
@@ -47,6 +48,21 @@ public class SaleApplicationService {
                     "Listingu nuk është aktiv (status: " + listing.getStatus() + ")");
         }
 
+        Property property = listing.getProperty();
+        if (property.getStatus() == PropertyStatus.SOLD
+                || property.getStatus() == PropertyStatus.INACTIVE) {
+            throw new InvalidStateException(
+                    "Prona nuk është e disponueshme për blerje (status: " + property.getStatus() + ")"
+            );
+        }
+
+        // Ekziston tashmë tek RentalService, por shto edhe RENTED check:
+        if (property.getStatus() == PropertyStatus.RENTED) {
+            throw new ConflictException(
+                    "Kjo pronë është tashmë e dhënë me qira dhe nuk është e disponueshme për blerje."
+            );
+        }
+
         // Kontrollo duplicate PENDING/APPROVED
         applicationRepo.findByListing_IdAndBuyerIdAndStatusIn(
                         req.listingId(), buyerId, List.of("PENDING", "APPROVED"))
@@ -55,8 +71,6 @@ public class SaleApplicationService {
                             "Keni tashmë një aplikim " + a.getStatus()
                                     + " për këtë listing (id=" + a.getId() + ")");
                 });
-
-        Property property = listing.getProperty();
 
         SaleApplication app = SaleApplication.builder()
                 .listing(listing)
