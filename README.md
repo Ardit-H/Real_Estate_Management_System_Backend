@@ -126,6 +126,21 @@ The system is organized around these core domains:
 
 ---
 
+### Registration — Invitation Only
+
+The system uses invitation-only registration. Public signup is disabled.
+Admins generate a secure single-use token via POST /api/invites, which 
+produces a link in the format /register?token=abc123.
+
+The token is stored in public.invite_tokens with a 7-day expiry and 
+single-use enforcement. When a user registers, the token is marked as 
+used inside the same @Transactional block as user creation — if 
+registration fails, the token remains valid (automatic rollback).
+
+Navigating to /register without a token redirects immediately to login.
+
+---
+
 ## Authentication and Authorization
 
 ### Authentication
@@ -229,6 +244,24 @@ sequenceDiagram
 
 ---
 
+### Impersonation — Admin Acting as Agent/Client
+
+Admins can impersonate any user within the same tenant via:
+
+POST /api/auth/impersonate/{userId}
+
+The endpoint returns a new JWT token scoped to the target user's 
+role and schema. The token contains an additional claim 
+(impersonated_by: adminId) for audit purposes. JwtAuthFilter 
+logs a WARN when an impersonation token is detected:
+
+IMPERSONATION ACTIVE — admin=7 acting as userId=15
+
+Impersonation is tenant-scoped — admins cannot impersonate users 
+from other tenants.
+
+---
+
 ## BaseController — OOP/DRY Pattern
 
 All controllers except `AuthController` extend `BaseController`, which centralizes common response-building logic:
@@ -251,14 +284,16 @@ This eliminates repeated `ResponseEntity.ok(...)`, `PageRequest.of(...)`, and `H
 
 ## Caching — Redis
 
-Properties and notification counts are cached in Redis with a 10-minute TTL:
+Notification counts, and dashboard statistics 
+are cached in Redis with a 10-minute TTL:
 
-```
-User → GET /api/properties/filter → miss → query DB → cache in Redis
-User → GET /api/properties/filter → hit  → return from Redis (0 DB queries)
-```
+User → GET /api/dashboard/stats → miss → aggregate DB queries → cache per tenant
+User → GET /api/dashboard/stats → hit  → return from Redis (cache key = tenantId)
 
-`@Cacheable` is applied to read-heavy endpoints. `@CacheEvict` invalidates the cache automatically on create, update, and delete operations. `@EnableCaching` is configured on `BackendApplication`.
+@Cacheable is applied to read-heavy endpoints. @CacheEvict invalidates 
+the cache automatically on create, update, and delete operations.
+Dashboard stats cache is evicted automatically when underlying data changes.
+@EnableCaching is configured on BackendApplication.
 
 ---
 
