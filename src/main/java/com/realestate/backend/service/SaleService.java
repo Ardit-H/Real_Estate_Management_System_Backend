@@ -2,7 +2,9 @@ package com.realestate.backend.service;
 
 import com.realestate.backend.dto.sale.SaleDtos.*;
 import com.realestate.backend.entity.User;
+import com.realestate.backend.entity.enums.ListingType;
 import com.realestate.backend.entity.enums.NotificationType;
+import com.realestate.backend.entity.enums.PropertyStatus;
 import com.realestate.backend.entity.enums.SaleStatus;
 import com.realestate.backend.entity.property.Property;
 import com.realestate.backend.entity.sale.SaleContract;
@@ -83,6 +85,16 @@ public class SaleService {
         Property property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Prona nuk u gjet: " + req.propertyId()));
 
+        if (property.getListingType() == ListingType.RENT) {
+            throw new ConflictException(
+                    "Kjo pronë është e konfiguruar vetëm për qira — nuk mund të krijohet sale listing."
+            );
+        }
+        if (property.getStatus() == PropertyStatus.SOLD) {
+            throw new ConflictException(
+                    "Kjo pronë është shitur — nuk mund të krijohet sale listing i ri."
+            );
+        }
         SaleListing listing = SaleListing.builder()
                 .property(property)
                 .agentId(TenantContext.getUserId())
@@ -187,6 +199,19 @@ public class SaleService {
         Property property = propertyRepo.findByIdAndDeletedAtIsNull(req.propertyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Prona nuk u gjet: " + req.propertyId()));
 
+        // Kontro nese prona eshte tashmë e shitur
+        if (property.getStatus() == PropertyStatus.SOLD) {
+            throw new ConflictException(
+                    "Kjo pronë është tashmë e shitur dhe nuk mund të blihet sërish."
+            );
+        }
+// Kontro nese ka kontrate COMPLETED per kete prone
+        contractRepo.findByProperty_IdAndStatus(req.propertyId(), "COMPLETED")
+                .ifPresent(c -> {
+                    throw new ConflictException(
+                            "Prona ka tashmë një kontratë shitjeje të kompletuar (id=" + c.getId() + ")."
+                    );
+                });
         SaleListing listing = null;
         if (req.listingId() != null) {
             listing = findActiveListing(req.listingId());
@@ -206,13 +231,14 @@ public class SaleService {
                 .build();
 
         SaleContract saved = contractRepo.save(contract);
+        propertyRepo.updateStatus(req.propertyId(), PropertyStatus.PENDING);
         notificationService.sendNotification(
                 req.buyerId(),
                 "Sale Contract Created",
                 "A sale contract has been created for property #" + req.propertyId() + ". Please review.",
                 NotificationType.INFO,
                 "sale_contract", saved.getId(),
-                "/client/mycontracts"
+                "/client/mysalecontracts"
         );
         log.info("SaleContract u krijua: id={}, property={}, buyer={}",
                 saved.getId(), req.propertyId(), req.buyerId());
@@ -273,6 +299,10 @@ public class SaleService {
         contractRepo.updateStatus(id, req.status());
         if ("COMPLETED".equals(req.status())) {
             SaleContract fresh = findContract(id);
+            propertyRepo.updateStatus(fresh.getProperty().getId(), PropertyStatus.SOLD);
+            // Sheno edhe listing-at si SOLD
+            listingRepo.findByProperty_IdAndDeletedAtIsNull(fresh.getProperty().getId())
+                    .forEach(l -> listingRepo.updateStatus(l.getId(), SaleStatus.SOLD));
             createCommissionPayments(fresh);
             notificationService.sendNotification(
                     fresh.getBuyerId(),
@@ -280,7 +310,7 @@ public class SaleService {
                     "Congratulations! Your purchase of property #" + fresh.getProperty().getId() + " is complete.",
                     NotificationType.SUCCESS,
                     "sale_contract", id,
-                    "/client/mycontracts"
+                    "/client/mysalecontracts"
             );
             notificationService.sendNotification(
                     fresh.getAgentId(),
@@ -291,6 +321,15 @@ public class SaleService {
                     "/agent/sales"
             );
         }
+        if ("CANCELLED".equals(req.status())) {
+            // Kontro nese ka kontrate tjeter PENDING per kete prone
+            boolean hasOther = contractRepo.findByProperty_IdOrderByCreatedAtDesc(
+                    contract.getProperty().getId()
+            ).stream().anyMatch(c -> !c.getId().equals(id) && "PENDING".equals(c.getStatus()));
+
+            PropertyStatus revertTo = hasOther ? PropertyStatus.PENDING : PropertyStatus.AVAILABLE;
+            propertyRepo.updateStatus(contract.getProperty().getId(), revertTo);
+        }
         log.info("SaleContract id={} statusi u ndryshua në {}", id, req.status());
         return toContractResponse(findContract(id));
     }
@@ -299,16 +338,34 @@ public class SaleService {
 
     @Transactional(readOnly = true)
     public List<SalePaymentResponse> getPaymentsByContract(Long contractId) {
-        assertIsAdminOrAgent();
-        findContract(contractId); // kontrollo ekzistencën
+        SaleContract contract = findContract(contractId);
+
+        // CLIENT mund të shohë vetëm pagesat e kontratave të tij
+        if (TenantContext.hasRole("CLIENT")) {
+            if (!contract.getBuyerId().equals(TenantContext.getUserId())) {
+                throw new ForbiddenException("Nuk keni akses në këtë kontratë");
+            }
+        } else {
+            assertIsAdminOrAgent();
+        }
+
         return paymentRepo.findByContract_IdOrderByCreatedAtAsc(contractId)
                 .stream().map(this::toPaymentResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public SalePaymentSummaryResponse getPaymentSummary(Long contractId) {
-        assertIsAdminOrAgent();
-        findContract(contractId);
+        SaleContract contract = findContract(contractId);
+
+        // CLIENT mund të shohë vetëm summary e kontratave të tij
+        if (TenantContext.hasRole("CLIENT")) {
+            if (!contract.getBuyerId().equals(TenantContext.getUserId())) {
+                throw new ForbiddenException("Nuk keni akses në këtë kontratë");
+            }
+        } else {
+            assertIsAdminOrAgent();
+        }
+
         List<SalePaymentResponse> payments = paymentRepo
                 .findByContract_IdOrderByCreatedAtAsc(contractId)
                 .stream().map(this::toPaymentResponse).toList();
